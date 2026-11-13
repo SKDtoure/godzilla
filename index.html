@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>G-0.0</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; margin: 0; background: #0d1214; overflow: hidden; }
+  body { display: grid; place-items: center; font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif; }
+
+  .stage {
+    --ar: 0.7071;
+    position: relative;
+    width: min(100vw, calc(100dvh * var(--ar)));
+    aspect-ratio: var(--ar);
+    overflow: hidden;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
+    visibility: hidden;
+  }
+  .layer {
+    position: absolute;
+    left: 0; top: 0; width: 100%; height: 100%;
+    object-fit: fill;
+    will-change: transform;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  #loading {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    color: #9fd8e8; font-size: 14px; letter-spacing: .12em;
+    transition: opacity .5s ease;
+  }
+  #loading.done { opacity: 0; pointer-events: none; }
+
+  .ui {
+    position: absolute; left: 0; right: 0; bottom: max(16px, env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    pointer-events: none; z-index: 5;
+  }
+  button#enable {
+    pointer-events: auto;
+    font-weight: 600; font-size: 15px; line-height: 1; font-family: inherit;
+    padding: 12px 20px; border-radius: 999px; border: 0;
+    background: #f2f2f2; color: #151515; cursor: pointer;
+  }
+  button#enable:focus-visible { outline: 3px solid #7fb4ff; outline-offset: 3px; }
+  .hint {
+    font-size: 13px; color: #fff; background: rgba(0,0,0,.55);
+    padding: 6px 12px; border-radius: 999px; text-align: center; max-width: 88%;
+    transition: opacity .6s ease;
+  }
+  .hidden { display: none !important; }
+  .fade { opacity: 0; }
+
+  /* ---- Showtimes sheet ---- */
+  .sheet {
+    position: fixed; left: 50%; bottom: 0; z-index: 20;
+    width: min(100vw, 520px); max-height: 78dvh; overflow: auto;
+    box-sizing: border-box; padding: 22px 20px max(22px, env(safe-area-inset-bottom));
+    background: rgba(9, 18, 22, .90);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border-top: 2px solid #46d3ff; border-radius: 20px 20px 0 0;
+    color: #e8f4f8;
+    transform: translate(-50%, 105%);
+    transition: transform .45s cubic-bezier(.2,.8,.2,1);
+    box-shadow: 0 -10px 40px rgba(70, 211, 255, .18);
+  }
+  .sheet.open { transform: translate(-50%, 0); }
+  .sheet .close {
+    position: absolute; top: 10px; right: 12px; width: 36px; height: 36px;
+    border: 0; border-radius: 50%; background: rgba(255,255,255,.1); color: #fff;
+    font-size: 20px; line-height: 1; cursor: pointer;
+  }
+  .sheet .close:focus-visible { outline: 3px solid #7fb4ff; outline-offset: 2px; }
+  .kicker { font-size: 12px; letter-spacing: .2em; color: #46d3ff; text-transform: uppercase; }
+  .sheet h2 { margin: 6px 0 0; font-size: 22px; font-weight: 700; line-height: 1.2; }
+  .venueJa { font-size: 14px; color: #a9c4cd; margin-top: 2px; }
+  .date { margin-top: 14px; font-size: 16px; font-weight: 600; color: #ffb35c; }
+  .dateJa { font-size: 13px; color: #c9a77a; }
+  .times { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; margin-top: 16px; }
+  .chip {
+    border: 1px solid rgba(70, 211, 255, .45); border-radius: 12px; padding: 10px 12px;
+    background: rgba(70, 211, 255, .08);
+  }
+  .chip .t { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chip .s { font-size: 12px; color: #a9c4cd; margin-top: 2px; }
+  .chip.past { opacity: .32; }
+  .chip.past .t { text-decoration: line-through; }
+  .chip.next { border-color: #ff9a2e; background: rgba(255, 154, 46, .14); box-shadow: 0 0 14px rgba(255, 154, 46, .25); }
+  .chip.next .s::after { content: " · next"; color: #ffb35c; }
+  .note { margin: 16px 0 0; font-size: 11px; line-height: 1.5; color: #7f9aa3; }
+</style>
+</head>
+<body>
+
+<div id="loading">LOADING…</div>
+
+<main class="stage" id="stage" aria-label="Animated Godzilla Minus Zero poster. Tap to make Godzilla stomp the ship and play the theme. Shake your phone, or wiggle your mouse, for showtimes at TOHO Cinemas Hibiya. Tilt your phone to look around.">
+  <div class="ui">
+    <button id="enable" class="hidden" type="button">Tap to enable motion</button>
+    <div id="hint" class="hint hidden"></div>
+  </div>
+</main>
+
+<section class="sheet" id="sheet" role="dialog" aria-label="Showtimes" aria-hidden="true">
+  <button class="close" id="sheetClose" type="button" aria-label="Close showtimes">&times;</button>
+  <div class="kicker">ゴジラ-0.0 &middot; G-0.0</div>
+  <h2 id="venue"></h2>
+  <div class="venueJa" id="venueJa"></div>
+  <div class="date" id="dateEn"></div>
+  <div class="dateJa" id="dateJa"></div>
+  <div class="times" id="times"></div>
+  <p class="note" id="note"></p>
+</section>
+
+<script>
+/* ======================= EDIT THESE ======================= */
+
+/*
+  Pivot points are "x% y%" of the WHOLE canvas (0% 0% = top-left, 100% 100% = bottom-right).
+  These are estimates read off the finished poster. If something swings from the wrong spot, nudge the numbers.
+*/
+const SHOULDER_L = "21% 33%";   // where the left arm (left of the poster) joins the body
+const SHOULDER_R = "75% 28%";   // where the right arm joins the body
+const HIP        = "40% 53%";   // where the left leg (the stomping one) joins the body
+const TAIL_BASE  = "71% 55%";   // where the tail joins the body
+const SHIP_FRONT_PIVOT = "54% 83%";  // the break in the front (left) half of the ship: its inner end
+const SHIP_BACK_PIVOT  = "77% 74%";  // the break in the back (right) half of the ship: its inner end
+const EXPLOSION_AT     = "66% 72%";  // centre of the explosion (embers are born here)
+const SPLASH_AT        = "74% 85%";  // centre of the splashes
+
+/*
+  LAYERS: list from BACK to FRONT (the order of lines = stacking order).
+  depth   0 = barely moves, 1+ = moves the most (tilt / mouse parallax)
+  kind    what the script does with the layer (tail, armL, armR, leg, ship, ocean, splash, explosion, smoke, ember, glow)
+  origin  pivot / scale centre
+  pad     extra edge cover (fraction of image width) for layers that slide around and must never show an edge
+*/
+const BODY = { depth: 0.24 };
+
+function copies(id, src, n, props) {      // n stacked copies of one file (it is only downloaded once)
+  return Array.from({ length: n }, (_, i) => ({ id: id + i, src, copy: i, copies: n, ...props }));
+}
+
+const EMBER_COPIES = 3;                   // how many embers waves overlap (more = denser stream, a little heavier)
+const SMOKE_COPIES = 2;                   // keep at 2: they cross-fade into each other for a seamless loop
+
+const LAYERS = [
+  { id: "background", src: "layer1-godzilla-background.png", depth: 0.10 },
+
+  { id: "tail",       src: "layer2-godzilla-tail.png",       depth: 0.16, kind: "tail", origin: TAIL_BASE },
+  { id: "tailspines", src: "layer2-godzilla-tailspines.png", depth: 0.16, kind: "tail", origin: TAIL_BASE },
+
+  { id: "body",     src: "layer3-godzilla-body01.png",     ...BODY },
+  { id: "leftArm",  src: "layer3-godzilla-leftarm02.png",  ...BODY, kind: "armL", origin: SHOULDER_L },
+  { id: "rightArm", src: "layer3-godzilla-rightarm03.png", ...BODY, kind: "armR", origin: SHOULDER_R },
+  { id: "spines",   src: "layer3-godzilla-spines04.png",   ...BODY },
+  // Glow = a brightened copy of the layer whose opacity pulses (no heavy per-frame filter work)
+  { id: "spinesGlow",     src: "layer3-godzilla-spines04.png", ...BODY, kind: "glow", glow: "spines",
+    filter: "brightness(2.1) saturate(1.5)" },
+  { id: "highlights",     src: "layer4-godzilla-highlights.png", ...BODY },
+  { id: "highlightsGlow", src: "layer4-godzilla-highlights.png", ...BODY, kind: "glow", glow: "highlights",
+    filter: "brightness(1.9) saturate(1.3)" },
+
+  ...copies("smoke", "layer5-godzilla-smoke.png", SMOKE_COPIES, { depth: 0.28, kind: "smoke" }),
+
+  { id: "ocean",      src: "layer6-godzilla-ocean.png",        depth: 0.36, kind: "ocean", pad: 0.012 },
+  { id: "backSplash", src: "layer7-godzilla-back_splash.png",  depth: 0.38, kind: "splash", origin: SPLASH_AT, pad: 0.012 },
+  { id: "backShip",   src: "layer8-godzilla-back_ship.png",    depth: 0.40, kind: "ship", origin: SHIP_BACK_PIVOT },
+  { id: "frontShip",  src: "layer9-godzilla-front_ship.png",   depth: 0.46, kind: "ship", origin: SHIP_FRONT_PIVOT },
+  { id: "leftLeg",    src: "layer10-godzilla-left_leg.png",    ...BODY, kind: "leg", origin: HIP },
+  { id: "explosion",  src: "layer11-godzilla-explosion.png",   depth: 0.46, kind: "explosion", origin: EXPLOSION_AT },
+  { id: "frontSplash",src: "layer12-godzilla-front_splash.png",depth: 0.50, kind: "splash", origin: SPLASH_AT, pad: 0.012 },
+
+  ...copies("embers", "layer13-godzilla-embers.png", EMBER_COPIES, { depth: 0.52, kind: "ember", origin: EXPLOSION_AT })
+];
+
+// ---- Movement feel (tilt on phone, pointer position on desktop) ----
+const MAX_SHIFT = 0.02;      // front-layer travel as a fraction of image width
+const TILT_RANGE = 20;       // degrees of phone tilt for full movement
+const SMOOTHING = 0.08;      // 0.04 = floaty, 0.15 = snappy
+const DIRECTION = 1;         // set to -1 if the movement feels backwards
+
+// ---- The stomp (plays on tap) ----
+const STOMP_WINDUP = 0.55;   // seconds the leg takes to rise
+const STOMP_STRIKE = 0.12;   // seconds the foot takes to slam down
+const STOMP_HOLD = 0.60;     // seconds the ship stays pressed under the foot before it is released
+const STOMP_LOCK = 2.2;      // seconds before another tap can start a new stomp
+const LEG_LIFT_DEG = 5;      // how far the leg swings up from the hip (degrees)
+const LEG_LIFT_Y = 0.006;    // how much the whole leg rises (fraction of image height)
+const LEG_PRESS_DEG = -1.4;  // how far past rest the foot pushes when it lands
+const LEG_PRESS_Y = 0.007;   // how far the leg sinks when it lands
+const LEG_RELEASE = 0.55;    // seconds for the leg to ease back to rest
+const ARM_WIND = 3;          // degrees the arms swing outward during the wind-up
+const ARM_SNAP = 2.6;        // degrees they snap inward when the foot lands, then settle
+const ARM_IDLE = 0.3;        // tiny always-on arm sway (degrees)
+
+// ---- Ship: folds in on itself when stepped on, floats back up ----
+const SHIP_FOLD_FRONT = 4.5; // degrees the front half folds (its outer end rises)
+const SHIP_FOLD_BACK = -4.0; // degrees the back half folds
+const SHIP_DIP = 0.010;      // how far the front half is pushed down into the water (fraction of image height)
+const SHIP_DIP_BACK = 0.007; // same for the back half
+const SHIP_KICK = 0.22;      // extra downward shove at the moment of impact
+const BUOY_STIFF = 70;       // buoyancy spring: higher = snaps back faster
+const BUOY_DAMP = 6.5;       // buoyancy damping: lower = bobs longer after the hit
+const BOB_AMOUNT = 0.0016;   // idle floating (fraction of image height)
+const ROCK_DEG = 0.3;        // idle rocking (degrees)
+
+// ---- Impact reactions ----
+const SPLASH_POP = 0.07;     // splash grows by this much on impact (0 = none)
+const SPLASH_RISE = 0.012;   // and rises by this (fraction of image height)
+const EXPLOSION_POP = 0.06;  // explosion swells on impact
+const EXPLOSION_FLICKER = 0.008; // idle flame flicker
+const CAMERA_SHAKE = 0.004;  // how hard the whole poster jolts on impact (fraction of image width, 0 = none)
+
+// ---- Other idle motion ----
+const TAIL_SWAY_DEG = 1.6;   // how far the tail swings each way
+const TAIL_PERIOD = 6.5;     // seconds per sway
+const OCEAN_DRIFT = 0.003;   // sideways drift of the water (fraction of image width)
+const OCEAN_BOB = 0.0012;    // gentle rise and fall of the water
+
+// ---- Smoke: drifts toward the upper-left corner when neutral ----
+const SMOKE_PERIOD = 18;     // seconds for one wisp to cross
+const SMOKE_TRAVEL = 0.12;   // how far it travels (fraction of image width)
+const SMOKE_WAVE = 0.012;    // sideways waft
+const SMOKE_OPACITY = 1;
+const SMOKE_TILT_FOLLOW = 0.8; // 0 = always upper-left; 1 = follows the tilt direction completely when tilted
+
+// ---- Embers: born at the explosion, drift to the right ----
+const EMBER_PERIOD = 4.6;    // seconds for one wave of embers
+const EMBER_DRIFT = 0.08;    // how far right they travel (fraction of image width)
+const EMBER_RISE = 0.025;    // how far up they float (fraction of image height)
+const EMBER_OPACITY = 0.95;
+const EMBER_BOOST = 2.0;     // how much faster/brighter they get right after an impact
+
+// ---- Glow: spines and highlights, at random intervals ----
+const GLOW_GAP = [3.5, 9];   // random wait between glows (min, max seconds)
+const GLOW_FIRST = 2.0;      // seconds before the first glow
+const GLOW_RISE = 0.22;      // seconds to brighten
+const GLOW_FALL = 1.1;       // seconds to fade
+const GLOW_HIGHLIGHT_DELAY = 0.12;  // highlights follow the spines by this long
+const GLOW_SPINES_MAX = 0.95;
+const GLOW_HIGHLIGHTS_MAX = 0.85;
+
+// ---- Music: plays on tap ----
+const AUDIO_SRC = "Godzilla - Main Theme.mp3";   // keep this file in the same folder as the page
+const AUDIO_VOLUME = 1;             // 0 to 1
+const AUDIO_LOOP = false;
+const TAP_PAUSES_MUSIC = false;     // false = tap only starts/keeps the music going; true = a tap while it plays also pauses it
+const DOUBLE_TAP_RESTARTS = false;  // false = double-tap rewinds and stays paused; true = rewinds and plays again
+const DOUBLE_TAP_RECENTERS = true;  // double-tap also re-centers the tilt
+const TAP_MAX_MOVE = 14;            // pixels a finger/mouse may move and still count as a tap
+const DOUBLE_TAP_TIME = 0.35;       // seconds between two taps to count as a double-tap
+
+// ---- Shake (phone) / wiggle (mouse) -> showtimes ----
+const SHAKE_THRESHOLD = 22;  // how hard each jolt must be (lower = easier)
+const SHAKE_SPIKES = 3;      // jolts within SHAKE_WINDOW that count as a shake
+const SHAKE_WINDOW = 0.6;    // seconds
+const MOUSE_MIN_STROKE = 40; // pixels per back-and-forth stroke
+const MOUSE_STROKES = 4;     // strokes within MOUSE_WINDOW that count as a shake
+const MOUSE_WINDOW = 0.8;    // seconds
+const SHAKE_COOLDOWN = 1.0;  // seconds before another shake is accepted
+const SHEET_AUTOHIDE = 0;    // seconds until the showtimes close by themselves (0 = stay until closed)
+
+// ---- Showtimes (SAMPLE DATA for a concept piece, replace with real ones if you ever need them) ----
+const VENUE = { name: "TOHO Cinemas Hibiya", nameJa: "TOHOシネマズ日比谷", area: "Tokyo \u00B7 \u6771\u4EAC" };
+const SHOWTIMES_WEEKDAY = [
+  { time: "09:20", screen: "Screen 1" }, { time: "11:55", screen: "Screen 2" }, { time: "14:30", screen: "Screen 1" },
+  { time: "17:05", screen: "Screen 3" }, { time: "19:40", screen: "Screen 1" }, { time: "22:15", screen: "Screen 2" }
+];
+const SHOWTIMES_WEEKEND = [
+  { time: "08:40", screen: "Screen 2" }, { time: "10:50", screen: "Screen 1" }, { time: "13:20", screen: "Screen 3" },
+  { time: "15:45", screen: "Screen 1" }, { time: "18:10", screen: "Screen 2" }, { time: "20:35", screen: "Screen 1" },
+  { time: "22:55", screen: "Screen 3" }
+];
+const SHOW_SAMPLE_NOTICE = true;     // keeps the "sample data" line on the sheet (recommended)
+
+/* ======================= CODE ======================= */
+
+const stage = document.getElementById("stage");
+const ui = stage.querySelector(".ui");
+const enableBtn = document.getElementById("enable");
+const hint = document.getElementById("hint");
+const loadingEl = document.getElementById("loading");
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, u) => a + (b - a) * u;
+const rand = ([a, b]) => a + Math.random() * (b - a);
+const TAU = Math.PI * 2;
+const smooth = u => { u = clamp(u, 0, 1); return u * u * (3 - 2 * u); };
+
+/* ---------- Build the layers ---------- */
+
+const layers = LAYERS.map((cfg, i) => {
+  const img = new Image();
+  img.className = "layer";
+  img.alt = "";
+  img.draggable = false;
+  img.decoding = "async";
+  img.src = cfg.src;
+  img.style.transformOrigin = cfg.origin || "50% 50%";
+  if (cfg.filter) img.style.filter = cfg.filter;
+  // glow overlays and the extra smoke/ember waves start hidden; the first wave is visible so reduced-motion still shows them
+  const firstWave = (cfg.kind === "smoke" || cfg.kind === "ember") && cfg.copy === 0;
+  if (cfg.kind === "glow" || ((cfg.kind === "smoke" || cfg.kind === "ember") && !firstWave)) {
+    img.style.opacity = 0; img.style.visibility = "hidden";
+  }
+  stage.insertBefore(img, ui);
+  return { ...cfg, el: img, shift: 0, phase: i * 1.7, lastOp: -1 };
+});
+const byId = id => layers.find(l => l.id === id);
+
+function setAspect() {
+  const first = layers[0].el;
+  if (first.naturalWidth) stage.style.setProperty("--ar", first.naturalWidth / first.naturalHeight);
+  sizeLayers();
+}
+layers[0].el.addEventListener("load", setAspect);
+if (layers[0].el.complete) setAspect();
+
+// Each layer is enlarged by the distance it can travel, so edges never show.
+function sizeLayers() {
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  layers.forEach(l => {
+    l.shift = l.depth * MAX_SHIFT * w;
+    const pad = l.shift + (l.pad || 0) * w;
+    l.pad_px = pad;
+    l.el.style.left = -pad + "px";
+    l.el.style.top = -pad + "px";
+    l.el.style.width = (w + pad * 2) + "px";
+    l.el.style.height = (h + pad * 2) + "px";
+  });
+}
+new ResizeObserver(sizeLayers).observe(stage);
+
+/* ---------- Shared state ---------- */
+
+let tx = 0, ty = 0, cx = 0, cy = 0;     // tilt target and smoothed tilt (-1..1)
+let lastT = null;
+
+let stompStart = -99, impactAt = -99, impactFired = false;
+let smokeT = 0, emberT = 0;
+let sdx = -0.7071, sdy = -0.7071;       // current smoke direction (starts toward the upper-left corner)
+
+// Ship physics (spring = buoyancy)
+const ships = {
+  frontShip: { a: 0, aV: 0, y: 0, yV: 0, foldTo: SHIP_FOLD_FRONT, dipTo: SHIP_DIP },
+  backShip:  { a: 0, aV: 0, y: 0, yV: 0, foldTo: SHIP_FOLD_BACK,  dipTo: SHIP_DIP_BACK }
+};
+
+let glowStart = -99, nextGlow = GLOW_FIRST;
+
+/* ---------- Animation helpers ---------- */
+
+// Pose of leg and arms at p seconds after the tap
+function stompPose(p) {
+  const W1 = STOMP_WINDUP, S1 = STOMP_WINDUP + STOMP_STRIKE;
+  let leg = 0, legY = 0, armW = 0;
+  if (p < 0) return { leg, legY, armW };
+  if (p < W1) {                                          // wind-up: leg rises, arms swing out
+    const u = smooth(p / W1);
+    leg = LEG_LIFT_DEG * u; legY = -LEG_LIFT_Y * u; armW = ARM_WIND * u;
+  } else if (p < S1) {                                   // strike: foot slams down, arms snap in
+    const u = (p - W1) / STOMP_STRIKE, e = u * u;
+    leg = lerp(LEG_LIFT_DEG, LEG_PRESS_DEG, e); legY = lerp(-LEG_LIFT_Y, LEG_PRESS_Y, e); armW = lerp(ARM_WIND, -ARM_SNAP, e);
+  } else {                                               // release: leg eases back, arms settle with a wobble
+    const q = p - S1;
+    const d = Math.exp(-q / LEG_RELEASE);
+    leg = LEG_PRESS_DEG * d; legY = LEG_PRESS_Y * d;
+    armW = -ARM_SNAP * Math.exp(-q / 0.7) * Math.cos(q * TAU * 1.3);
+  }
+  return { leg, legY, armW };
+}
+
+// 0 -> quick rise -> slow fall, for splashes / explosion after the impact
+function burst(q) { return q < 0 ? 0 : (1 - Math.exp(-q * 30)) * Math.exp(-q * 3.2); }
+
+function startStomp(t) {
+  if (t - stompStart < STOMP_LOCK) return;
+  stompStart = t;
+  impactAt = t + STOMP_WINDUP + STOMP_STRIKE;
+  impactFired = false;
+}
+
+function updateShips(dt, q) {
+  const hold = q >= 0 && q < STOMP_HOLD;
+  if (q >= 0 && !impactFired) {                         // the moment the foot lands: shove both halves down
+    impactFired = true;
+    for (const k in ships) ships[k].yV += SHIP_KICK;
+  }
+  for (const k in ships) {
+    const s = ships[k];
+    const tgtA = hold ? s.foldTo : 0, tgtY = hold ? s.dipTo : 0;
+    // two springs (fold angle and height): the underdamped spring is the buoyancy, so they bob after the hit
+    s.aV += (-BUOY_STIFF * (s.a - tgtA) - BUOY_DAMP * s.aV) * dt;  s.a += s.aV * dt;
+    s.yV += (-BUOY_STIFF * 0.7 * (s.y - tgtY) - BUOY_DAMP * 0.8 * s.yV) * dt;  s.y += s.yV * dt;
+  }
+}
+
+function glowEnv(u) {
+  if (u <= 0) return 0;
+  if (u < GLOW_RISE) return smooth(u / GLOW_RISE);
+  if (u < GLOW_RISE + GLOW_FALL) return 1 - smooth((u - GLOW_RISE) / GLOW_FALL);
+  return 0;
+}
+
+/* ---------- Main loop ---------- */
+
+function frame(now) {
+  const t = now / 1000;
+  const dt = lastT == null ? 0 : Math.min(t - lastT, 0.05);
+  lastT = t;
+  const W = stage.clientWidth, H = stage.clientHeight;
+
+  cx += (tx - cx) * SMOOTHING;
+  cy += (ty - cy) * SMOOTHING;
+  const tiltMag = Math.hypot(cx, cy);
+
+  // stomp, ship, impact reactions
+  const S = stompPose(t - stompStart);
+  const q = t - impactAt;                               // seconds since the foot landed (negative before)
+  updateShips(dt, q);
+  const bu = burst(q);
+  const boost = q >= 0 ? Math.exp(-q / 1.3) : 0;
+  const camX = CAMERA_SHAKE * W * (q >= 0 ? Math.exp(-q * 7) * Math.sin(q * 55) : 0);
+  const camY = CAMERA_SHAKE * W * 0.7 * (q >= 0 ? Math.exp(-q * 7) * Math.cos(q * 47) : 0);
+
+  // ocean idle (splashes ride on it)
+  const oceanDx = Math.sin(t * TAU / 9) * OCEAN_DRIFT * W;
+  const oceanDyF = Math.sin(t * TAU / 6.5) * OCEAN_BOB + ships.frontShip.y * 0.35;
+
+  // smoke direction: upper-left when neutral, leaning toward the tilt when tilted
+  {
+    const a = clamp((tiltMag - 0.12) / 0.4, 0, 1) * SMOKE_TILT_FOLLOW;
+    let tx_ = -0.7071, ty_ = -0.7071;
+    if (a > 0 && tiltMag > 1e-4) { tx_ = lerp(tx_, cx / tiltMag, a); ty_ = lerp(ty_, cy / tiltMag, a); }
+    const len = Math.hypot(tx_, ty_) || 1;
+    const k = 1 - Math.exp(-dt * 1.5);
+    sdx += (tx_ / len - sdx) * k; sdy += (ty_ / len - sdy) * k;
+  }
+  smokeT += dt / SMOKE_PERIOD;
+  emberT += dt * (1 + EMBER_BOOST * boost) / EMBER_PERIOD;
+
+  // random glow of the spines and highlights
+  if (t >= nextGlow) { glowStart = t; nextGlow = t + GLOW_RISE + GLOW_FALL + rand(GLOW_GAP); }
+  const gSpines = glowEnv(t - glowStart) * GLOW_SPINES_MAX;
+  const gHigh = glowEnv(t - glowStart - GLOW_HIGHLIGHT_DELAY) * GLOW_HIGHLIGHTS_MAX;
+
+  for (const l of layers) {
+    const layerH = H + 2 * l.pad_px;
+    let dx = -cx * l.shift * DIRECTION + camX;
+    let dy = -cy * l.shift * DIRECTION + camY;
+    let rot = 0, sc = 1, op = null;
+
+    switch (l.kind) {
+      case "tail":
+        rot = TAIL_SWAY_DEG * (Math.sin(t * TAU / TAIL_PERIOD) + 0.25 * Math.sin(t * TAU * 2.3 / TAIL_PERIOD + 1.1));
+        break;
+      case "armL":
+        rot = S.armW + ARM_IDLE * Math.sin(t * TAU / 4.6);
+        break;
+      case "armR":
+        rot = -S.armW + ARM_IDLE * Math.sin(t * TAU / 5.1 + 1.4);
+        break;
+      case "leg":
+        rot = S.leg; dy += S.legY * layerH;
+        break;
+      case "ship": {
+        const s = ships[l.id];
+        const ph = l.id === "frontShip" ? 0 : 2.1;
+        dy += (s.y + BOB_AMOUNT * Math.sin(t * TAU / 5.2 + ph)) * layerH;
+        rot = s.a + ROCK_DEG * Math.sin(t * TAU / 6.1 + ph + 0.8);
+        break;
+      }
+      case "ocean":
+        dx += oceanDx; dy += oceanDyF * layerH;
+        break;
+      case "splash":
+        dx += oceanDx; dy += (oceanDyF - SPLASH_RISE * bu) * layerH;
+        sc = 1 + SPLASH_POP * bu;
+        break;
+      case "explosion":
+        sc = 1 + EXPLOSION_POP * bu + EXPLOSION_FLICKER * Math.sin(t * TAU * 6.5);
+        break;
+      case "smoke": {
+        const p = (smokeT + l.copy / l.copies) % 1;
+        const along = (p - 0.5) * SMOKE_TRAVEL * W;
+        const perp = Math.sin(p * TAU * 1.5 + l.copy) * SMOKE_WAVE * W;
+        dx += sdx * along - sdy * perp;
+        dy += sdy * along + sdx * perp;
+        sc = 1 + SMOKE_TRAVEL * 1.15;                   // slightly oversized so its edge never shows
+        const s2 = Math.sin(Math.PI * p);
+        op = SMOKE_OPACITY * s2 * s2;
+        break;
+      }
+      case "ember": {
+        const p = (emberT + l.copy / l.copies) % 1;
+        dx += EMBER_DRIFT * p * W;
+        dy -= EMBER_RISE * p * layerH;
+        sc = 0.5 + 0.55 * p;                            // grows outward from the explosion
+        op = clamp(Math.min(p / 0.12, (1 - p) / 0.5), 0, 1) * clamp(EMBER_OPACITY + 0.3 * boost, 0, 1);
+        break;
+      }
+      case "glow":
+        op = l.glow === "spines" ? gSpines : gHigh;
+        break;
+    }
+
+    l.el.style.transform = "translate3d(" + dx + "px," + dy + "px,0) rotate(" + rot + "deg) scale(" + sc + ")";
+
+    if (op !== null) {
+      op = Math.round(op * 1000) / 1000;
+      if (op !== l.lastOp) {
+        l.el.style.opacity = op;
+        l.el.style.visibility = op < 0.004 ? "hidden" : "visible";
+        l.lastOp = op;
+      }
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Input: mouse and tilt ---------- */
+
+stage.addEventListener("pointermove", e => {
+  if (e.pointerType === "touch" || reduceMotion) return;
+  const r = stage.getBoundingClientRect();
+  tx = clamp(((e.clientX - r.left) / r.width) * 2 - 1, -1, 1);
+  ty = clamp(((e.clientY - r.top) / r.height) * 2 - 1, -1, 1);
+});
+stage.addEventListener("pointerleave", e => {
+  if (e.pointerType !== "touch") { tx = 0; ty = 0; }
+});
+
+let base = null;
+let gotSensor = false, gotMotion = false;
+
+function onOrientation(e) {
+  if (e.gamma == null || e.beta == null || reduceMotion) return;
+  gotSensor = true;
+  if (!base) base = { g: e.gamma, b: e.beta };
+  tx = clamp((e.gamma - base.g) / TILT_RANGE, -1, 1);
+  ty = clamp((e.beta - base.b) / TILT_RANGE, -1, 1);
+}
+
+function showHint(text, ms) {
+  hint.textContent = text;
+  hint.classList.remove("hidden", "fade");
+  clearTimeout(showHint.t);
+  showHint.t = setTimeout(() => {
+    hint.classList.add("fade");
+    setTimeout(() => hint.classList.add("hidden"), 700);
+  }, ms);
+}
+
+/* ---------- Shake (phone) and wiggle (mouse) -> showtimes ---------- */
+
+let lastShake = -99;
+function onShake() {
+  const now = performance.now() / 1000;
+  if (now - lastShake < SHAKE_COOLDOWN) return;
+  lastShake = now;
+  if (navigator.vibrate) navigator.vibrate(15);
+  toggleSheet();
+}
+
+let spikes = [], lastAcc = null;
+function onMotion(e) {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x == null) return;
+  gotMotion = true;
+  if (lastAcc) {
+    const jolt = Math.abs(a.x - lastAcc.x) + Math.abs(a.y - lastAcc.y) + Math.abs(a.z - lastAcc.z);
+    const t = performance.now() / 1000;
+    if (jolt > SHAKE_THRESHOLD) spikes.push(t);
+    spikes = spikes.filter(s => t - s <= SHAKE_WINDOW);
+    if (spikes.length >= SHAKE_SPIKES) { spikes = []; onShake(); }
+  }
+  lastAcc = { x: a.x, y: a.y, z: a.z };
+}
+
+const mouseAxes = { x: { dir: 0, ext: 0 }, y: { dir: 0, ext: 0 } };
+let strokes = [];
+function trackAxis(a, v, t) {
+  if (a.dir === 0) { a.dir = 1; a.ext = v; return; }
+  if ((v - a.ext) * a.dir > 0) { a.ext = v; return; }
+  if (Math.abs(v - a.ext) >= MOUSE_MIN_STROKE) { a.dir = -a.dir; a.ext = v; strokes.push(t); }
+}
+window.addEventListener("pointermove", e => {
+  if (e.pointerType !== "mouse" || reduceMotion) return;
+  const t = performance.now() / 1000;
+  trackAxis(mouseAxes.x, e.clientX, t);
+  trackAxis(mouseAxes.y, e.clientY, t);
+  strokes = strokes.filter(s => t - s <= MOUSE_WINDOW);
+  if (strokes.length >= MOUSE_STROKES) { strokes = []; onShake(); }
+});
+window.addEventListener("keydown", e => {           // handy for testing on a computer
+  if (e.key === "s" || e.key === "S") toggleSheet();
+  else if (e.key === "Escape") closeSheet();
+});
+
+/* ---------- Showtimes sheet ---------- */
+
+const sheet = document.getElementById("sheet");
+let sheetOpen = false, sheetTimer = null;
+
+// "Now" in Tokyo, because the theatre is in Tokyo whatever the viewer's own time zone is
+function tokyoNow() {
+  const d = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tokyo", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  }).formatToParts(d);
+  const get = type => (parts.find(p => p.type === type) || {}).value;
+  return {
+    date: d,
+    weekday: get("weekday"),
+    minutes: parseInt(get("hour"), 10) * 60 + parseInt(get("minute"), 10)
+  };
+}
+
+function renderSheet() {
+  const now = tokyoNow();
+  const fmt = (loc, opts) => new Intl.DateTimeFormat(loc, { timeZone: "Asia/Tokyo", ...opts }).format(now.date);
+  document.getElementById("venue").textContent = VENUE.name;
+  document.getElementById("venueJa").textContent = VENUE.nameJa + "  \u00B7  " + VENUE.area;
+  document.getElementById("dateEn").textContent = fmt("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  document.getElementById("dateJa").textContent = fmt("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
+
+  const list = (now.weekday === "Sat" || now.weekday === "Sun") ? SHOWTIMES_WEEKEND : SHOWTIMES_WEEKDAY;
+  const box = document.getElementById("times");
+  box.textContent = "";
+  let nextMarked = false;
+  list.forEach(s => {
+    const [h, m] = s.time.split(":").map(Number);
+    const past = h * 60 + m < now.minutes;
+    const chip = document.createElement("div");
+    chip.className = "chip" + (past ? " past" : "");
+    if (!past && !nextMarked) { chip.classList.add("next"); nextMarked = true; }
+    const t = document.createElement("div"); t.className = "t"; t.textContent = s.time;
+    const sc = document.createElement("div"); sc.className = "s"; sc.textContent = s.screen;
+    chip.append(t, sc);
+    box.appendChild(chip);
+  });
+  const note = document.getElementById("note");
+  note.textContent = SHOW_SAMPLE_NOTICE
+    ? "Concept piece \u2013 these showtimes are examples, not real listings. / \u30B3\u30F3\u30BB\u30D7\u30C8\u4F5C\u54C1\u3067\u3059\u3002\u4E0A\u6620\u6642\u9593\u306F\u30B5\u30F3\u30D7\u30EB\u3067\u3001\u5B9F\u969B\u306E\u3082\u306E\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002"
+    : "";
+}
+
+function openSheet() {
+  renderSheet();
+  sheet.classList.add("open");
+  sheet.setAttribute("aria-hidden", "false");
+  sheetOpen = true;
+  clearTimeout(sheetTimer);
+  if (SHEET_AUTOHIDE > 0) sheetTimer = setTimeout(closeSheet, SHEET_AUTOHIDE * 1000);
+}
+function closeSheet() {
+  sheet.classList.remove("open");
+  sheet.setAttribute("aria-hidden", "true");
+  sheetOpen = false;
+  clearTimeout(sheetTimer);
+}
+function toggleSheet() { sheetOpen ? closeSheet() : openSheet(); }
+document.getElementById("sheetClose").addEventListener("click", closeSheet);
+
+/* ---------- Music ---------- */
+
+const audio = new Audio();
+audio.preload = "metadata";
+audio.loop = AUDIO_LOOP;
+audio.volume = AUDIO_VOLUME;
+audio.src = encodeURI(AUDIO_SRC);
+let audioFailed = false;
+audio.addEventListener("error", () => {
+  audioFailed = true;
+  showHint("Couldn't load \"" + AUDIO_SRC + "\". Check the file is in the same folder as this page and the name matches.", 6000);
+});
+
+function playMusic() {
+  const p = audio.play();
+  if (p && p.catch) p.catch(() => { if (!audioFailed) showHint("Couldn't play the music on this device.", 3500); });
+}
+function resetAudio() {
+  audio.pause();
+  try { audio.currentTime = 0; } catch (e) {}
+  if (DOUBLE_TAP_RESTARTS) { playMusic(); showHint("\u21BA Restarted", 1000); }
+  else showHint("\u21BA Reset", 1000);
+}
+
+/* ---------- Taps ---------- */
+// A tap = press and release without moving much (detected on release: phones only start audio from a release).
+// Tap = stomp + music. Double-tap = reset the music. A tap while the showtimes are open just closes them.
+
+let down = null;
+let lastTap = -99;
+
+stage.addEventListener("pointerdown", e => {
+  if (e.target.closest && e.target.closest(".ui button")) { down = null; return; }
+  down = { x: e.clientX, y: e.clientY, id: e.pointerId };
+});
+stage.addEventListener("pointercancel", () => { down = null; });
+stage.addEventListener("pointerup", e => {
+  if (!down || down.id !== e.pointerId) return;
+  const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+  down = null;
+  if (moved > TAP_MAX_MOVE) return;
+
+  if (sheetOpen) { closeSheet(); return; }
+
+  const now = performance.now() / 1000;
+  if (now - lastTap < DOUBLE_TAP_TIME) {
+    lastTap = -99;
+    resetAudio();
+    if (DOUBLE_TAP_RECENTERS) base = null;
+    return;
+  }
+  lastTap = now;
+
+  if (!reduceMotion) startStomp(now);
+  if (audio.paused) playMusic();
+  else if (TAP_PAUSES_MUSIC) { audio.pause(); showHint("\u23F8 Paused", 900); }
+});
+
+/* ---------- Motion permission / start-up ---------- */
+
+function startSensors() {
+  window.addEventListener("deviceorientation", onOrientation);
+  window.addEventListener("devicemotion", onMotion);
+  enableBtn.classList.add("hidden");
+  showHint("Tap: stomp + music. Shake: showtimes. Tilt to look around. Double-tap resets the music.", 6000);
+  setTimeout(() => {
+    if (!gotSensor && !gotMotion) showHint("No motion sensor found. Wiggle your mouse over the image for showtimes.", 4000);
+  }, 1500);
+}
+
+const needsPermission =
+  (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") ||
+  (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function");
+const isTouch = matchMedia("(pointer: coarse)").matches;
+
+if (needsPermission) {
+  enableBtn.classList.remove("hidden");
+  enableBtn.addEventListener("click", async () => {
+    try {
+      const req = typeof DeviceMotionEvent.requestPermission === "function"
+        ? DeviceMotionEvent.requestPermission()
+        : DeviceOrientationEvent.requestPermission();
+      const result = await req;
+      if (result === "granted") startSensors();
+      else { enableBtn.classList.add("hidden"); showHint("Motion access was denied. Reload the page to try again.", 5000); }
+    } catch (err) {
+      showHint("Couldn't enable motion on this page.", 4000);
+    }
+  });
+} else if (isTouch && ("DeviceMotionEvent" in window || "DeviceOrientationEvent" in window)) {
+  startSensors();
+} else {
+  showHint("Click: stomp + music. Wiggle the mouse (or press S) for showtimes. Move the mouse to look around.", 5500);
+}
+
+// Wait until every layer is decoded so nothing pops in half-drawn, then start
+let started = false;
+function start() {
+  if (started) return;
+  started = true;
+  setAspect();
+  stage.style.visibility = "visible";
+  loadingEl.classList.add("done");
+  if (!reduceMotion) requestAnimationFrame(frame);
+}
+Promise.allSettled(layers.map(l => (l.el.decode ? l.el.decode() : Promise.resolve()))).then(start);
+setTimeout(start, 20000);       // safety net: never stay on the loading screen
+</script>
+</body>
+</html>
