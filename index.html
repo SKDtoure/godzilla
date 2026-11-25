@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>G-0.0</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; margin: 0; background: #0d1214; overflow: hidden; }
+  body { display: grid; place-items: center; font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif; }
+
+  .stage {
+    --ar: 0.7071;
+    position: relative;
+    width: min(100vw, calc(100dvh * var(--ar)));
+    aspect-ratio: var(--ar);
+    overflow: hidden;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
+    visibility: hidden;
+  }
+  .layer {
+    position: absolute;
+    left: 0; top: 0; width: 100%; height: 100%;
+    object-fit: fill;
+    will-change: transform;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  #loading {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    color: #9fd8e8; font-size: 14px; letter-spacing: .12em;
+    transition: opacity .5s ease;
+  }
+  #loading.done { opacity: 0; pointer-events: none; }
+
+  .ui {
+    position: absolute; left: 0; right: 0; bottom: max(16px, env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    pointer-events: none; z-index: 5;
+  }
+  button#enable {
+    pointer-events: auto;
+    font-weight: 600; font-size: 15px; line-height: 1; font-family: inherit;
+    padding: 12px 20px; border-radius: 999px; border: 0;
+    background: #f2f2f2; color: #151515; cursor: pointer;
+  }
+  button#enable:focus-visible { outline: 3px solid #7fb4ff; outline-offset: 3px; }
+  .hint {
+    font-size: 13px; color: #fff; background: rgba(0,0,0,.55);
+    padding: 6px 12px; border-radius: 999px; text-align: center; max-width: 88%;
+    transition: opacity .6s ease;
+  }
+  .hidden { display: none !important; }
+  .fade { opacity: 0; }
+
+  /* ---- Showtimes sheet ---- */
+  .sheet {
+    position: fixed; left: 50%; bottom: 0; z-index: 20;
+    width: min(100vw, 520px); max-height: 78dvh; overflow: auto;
+    box-sizing: border-box; padding: 22px 20px max(22px, env(safe-area-inset-bottom));
+    background: rgba(9, 18, 22, .90);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border-top: 2px solid #46d3ff; border-radius: 20px 20px 0 0;
+    color: #e8f4f8;
+    transform: translate(-50%, 105%);
+    transition: transform .45s cubic-bezier(.2,.8,.2,1);
+    box-shadow: 0 -10px 40px rgba(70, 211, 255, .18);
+  }
+  .sheet.open { transform: translate(-50%, 0); }
+  .sheet .close {
+    position: absolute; top: 10px; right: 12px; width: 36px; height: 36px;
+    border: 0; border-radius: 50%; background: rgba(255,255,255,.1); color: #fff;
+    font-size: 20px; line-height: 1; cursor: pointer;
+  }
+  .sheet .close:focus-visible { outline: 3px solid #7fb4ff; outline-offset: 2px; }
+  .kicker { font-size: 12px; letter-spacing: .2em; color: #46d3ff; text-transform: uppercase; }
+  .sheet h2 { margin: 6px 0 0; font-size: 22px; font-weight: 700; line-height: 1.2; }
+  .venueJa { font-size: 14px; color: #a9c4cd; margin-top: 2px; }
+  .date { margin-top: 14px; font-size: 16px; font-weight: 600; color: #ffb35c; }
+  .dateJa { font-size: 13px; color: #c9a77a; }
+  .times { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; margin-top: 16px; }
+  .chip {
+    border: 1px solid rgba(70, 211, 255, .45); border-radius: 12px; padding: 10px 12px;
+    background: rgba(70, 211, 255, .08);
+  }
+  .chip .t { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chip .s { font-size: 12px; color: #a9c4cd; margin-top: 2px; }
+  .chip.past { opacity: .32; }
+  .chip.past .t { text-decoration: line-through; }
+  .chip.next { border-color: #ff9a2e; background: rgba(255, 154, 46, .14); box-shadow: 0 0 14px rgba(255, 154, 46, .25); }
+  .chip.next .s::after { content: " · next"; color: #ffb35c; }
+  .venues { display: flex; gap: 8px; overflow-x: auto; margin: 14px -20px 0; padding: 2px 20px 6px; scrollbar-width: none; }
+  .venues::-webkit-scrollbar { display: none; }
+  .venues button {
+    flex: 0 0 auto; font: inherit; font-size: 13px; line-height: 1; padding: 9px 14px; border-radius: 999px;
+    border: 1px solid rgba(70, 211, 255, .45); background: transparent; color: #cfe6ee; cursor: pointer;
+  }
+  .venues button[aria-pressed="true"] { background: #46d3ff; border-color: #46d3ff; color: #06161b; font-weight: 700; }
+  .venues button:focus-visible { outline: 3px solid #7fb4ff; outline-offset: 2px; }
+  /* day picker */
+  .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 12px; }
+  .days button {
+    font: inherit; color: #cfe6ee; background: transparent; cursor: pointer; touch-action: manipulation;
+    border: 1px solid rgba(70, 211, 255, .35); border-radius: 12px; padding: 7px 0 6px; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 1px; line-height: 1.15;
+  }
+  .days button .dw { font-size: 11px; letter-spacing: .02em; }
+  .days button .dn { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .days button .dj { font-size: 10px; opacity: .75; }
+  .days button.wkend .dw, .days button.wkend .dj { color: #ffb35c; }
+  .days button:hover { background: rgba(70, 211, 255, .14); }
+  .days button[aria-pressed="true"] { background: #46d3ff; border-color: #46d3ff; color: #06161b; }
+  .days button[aria-pressed="true"] .dw, .days button[aria-pressed="true"] .dj { color: #06161b; opacity: 1; }
+  .days button:focus-visible { outline: 3px solid #7fb4ff; outline-offset: 2px; }
+  .official { display: inline-block; margin-top: 12px; font-size: 13px; color: #46d3ff; }
+  .note { margin: 16px 0 0; font-size: 11px; line-height: 1.5; color: #7f9aa3; }
+
+  /* showtimes are buttons now */
+  .chip { font: inherit; color: inherit; text-align: left; cursor: pointer; touch-action: manipulation; }
+  .chip .t, .chip .s { display: block; }
+  .chip:hover { background: rgba(70, 211, 255, .18); }
+  .chip:focus-visible { outline: 3px solid #7fb4ff; outline-offset: 2px; }
+  .chip:disabled { cursor: not-allowed; }
+  .tapHint { margin: 12px 0 0; font-size: 12px; color: #a9c4cd; }
+
+  /* ---- Ticket booking mockup ---- */
+  .booking {
+    position: fixed; inset: 0; z-index: 30; overflow: auto; overscroll-behavior: contain; touch-action: manipulation;
+    background: linear-gradient(180deg, #0c1d24, #071014); color: #e8f4f8;
+    visibility: hidden; opacity: 0; transform: translateY(24px);
+    transition: opacity .3s, transform .3s, visibility 0s .3s;
+  }
+  .booking.open { visibility: visible; opacity: 1; transform: none; transition: opacity .3s, transform .3s; }
+  .bk-wrap { max-width: 520px; min-height: 100%; margin: 0 auto; display: flex; flex-direction: column; }
+  .bk-head {
+    position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 10px;
+    padding: max(12px, env(safe-area-inset-top)) 14px 12px; background: rgba(9, 18, 22, .97);
+    border-bottom: 1px solid rgba(70, 211, 255, .25);
+  }
+  .bk-head .ttl { flex: 1; min-width: 0; }
+  .bk-head .ttl div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bk-head .kicker { font-size: 11px; }
+  #bkTheater { font-size: 16px; font-weight: 700; }
+  #bkWhen { font-size: 13px; color: #ffb35c; }
+  .bk-round {
+    flex: 0 0 auto; width: 40px; height: 40px; border: 0; border-radius: 50%; background: rgba(255,255,255,.1);
+    color: #fff; font-size: 20px; line-height: 1; cursor: pointer;
+  }
+  .bk-round[hidden] { display: none; }
+  .bk-round:focus-visible, .bk-primary:focus-visible, .seat:focus-visible, .bk-step-btn:focus-visible, .bk-pay:focus-visible, .bk-ghost:focus-visible {
+    outline: 3px solid #7fb4ff; outline-offset: 2px;
+  }
+  .bk-steps { display: flex; gap: 6px; padding: 12px 16px 0; margin: 0; list-style: none; }
+  .bk-steps li { flex: 1; text-align: center; font-size: 12px; color: #7f9aa3; padding-bottom: 6px; border-bottom: 3px solid rgba(255,255,255,.12); }
+  .bk-steps li small { display: block; font-size: 10px; opacity: .8; }
+  .bk-steps li.on { color: #fff; border-color: #46d3ff; font-weight: 700; }
+  .bk-steps li.done { color: #ffb35c; border-color: #ff9a2e; }
+  .bk-body { padding: 18px 16px 24px; flex: 1; }
+  .bk-h { margin: 0; font-size: 20px; }
+  .bk-hja { font-size: 13px; color: #a9c4cd; margin: 2px 0 14px; }
+  .bk-msg { margin-bottom: 14px; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: rgba(255,154,46,.14); border: 1px solid rgba(255,154,46,.5); }
+  .bk-hold { margin-bottom: 14px; padding: 8px 12px; border-radius: 12px; font-size: 13px; background: rgba(70,211,255,.1); border: 1px solid rgba(70,211,255,.35); font-variant-numeric: tabular-nums; }
+  .bk-hold.low { background: rgba(255,154,46,.14); border-color: rgba(255,154,46,.6); }
+  .bk-demo { margin-top: 16px; padding: 10px 12px; border-radius: 12px; font-size: 12px; line-height: 1.5; color: #cfe6ee; background: rgba(255,255,255,.06); border: 1px dashed rgba(255,255,255,.3); }
+  .bk-foot {
+    position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 16px max(14px, env(safe-area-inset-bottom)); background: rgba(9, 18, 22, .97);
+    border-top: 1px solid rgba(70, 211, 255, .25);
+  }
+  .bk-sum b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .bk-sum span { font-size: 12px; color: #a9c4cd; }
+  .bk-primary {
+    border: 0; border-radius: 999px; padding: 13px 22px; font: inherit; font-size: 16px; font-weight: 700;
+    background: #ff9a2e; color: #1a0f00; cursor: pointer;
+  }
+  .bk-primary:disabled { opacity: .35; cursor: not-allowed; }
+  .bk-foot .bk-primary { margin-left: auto; }
+  /* ticket types */
+  .bk-type { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-top: 1px solid rgba(255,255,255,.1); }
+  .bk-type:first-of-type { border-top: 0; }
+  .bk-type .nm { font-size: 16px; font-weight: 600; }
+  .bk-type .nmja { font-size: 12px; color: #a9c4cd; }
+  .bk-type .pr { font-size: 13px; color: #ffb35c; margin-top: 2px; }
+  .bk-stepper { display: flex; align-items: center; gap: 12px; }
+  .bk-step-btn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(70,211,255,.6); background: rgba(70,211,255,.1); color: #fff; font-size: 22px; line-height: 1; cursor: pointer; }
+  .bk-step-btn:disabled { opacity: .3; cursor: not-allowed; }
+  .bk-count { min-width: 22px; text-align: center; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  /* seats */
+  .bk-ghost { font: inherit; font-size: 13px; padding: 9px 14px; border-radius: 999px; border: 1px solid rgba(70,211,255,.55); background: transparent; color: #cfe6ee; cursor: pointer; }
+  .seatscroll { overflow-x: auto; margin: 16px -4px 0; padding: 0 4px; }
+  .seatmap { min-width: 300px; }
+  .screenbar { height: 9px; margin: 0 8% 6px; border-radius: 50% 50% 0 0 / 100% 100% 0 0; background: linear-gradient(#8be6ff, #2a7a90); box-shadow: 0 8px 22px rgba(70,211,255,.45); }
+  .screenlbl { text-align: center; font-size: 11px; letter-spacing: .3em; color: #7f9aa3; margin-bottom: 14px; }
+  .srow { display: grid; align-items: center; gap: 3px; margin-bottom: 4px; }
+  .srow .rl { font-size: 11px; color: #7f9aa3; text-align: center; }
+  .seat {
+    width: 100%; max-width: 26px; aspect-ratio: 1 / 1; justify-self: center; padding: 0; position: relative;
+    border-radius: 6px 6px 3px 3px; border: 1.5px solid rgba(70,211,255,.75); background: rgba(70,211,255,.12);
+    color: #1a0f00; font-size: 11px; font-weight: 700; cursor: pointer;
+  }
+  .seat[aria-pressed="true"] { background: #ff9a2e; border-color: #ffb35c; }
+  .seat[aria-pressed="true"]::after { content: "\2713"; }
+  .seat:disabled { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.06); cursor: not-allowed; }
+  .seat:disabled::after { content: "\00D7"; color: rgba(255,255,255,.35); }
+  .legend2 { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin-top: 14px; font-size: 12px; color: #a9c4cd; }
+  .legend2 i { display: inline-block; width: 14px; height: 14px; border-radius: 4px 4px 2px 2px; margin-right: 6px; vertical-align: -2px; border: 1.5px solid rgba(70,211,255,.75); background: rgba(70,211,255,.12); }
+  .legend2 i.sel { background: #ff9a2e; border-color: #ffb35c; }
+  .legend2 i.sold { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.18); }
+  .bk-picked { margin-top: 14px; text-align: center; font-size: 14px; font-weight: 600; color: #ffb35c; min-height: 1.4em; }
+  /* review + ticket */
+  .bk-card { padding: 14px; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid rgba(70,211,255,.25); margin-bottom: 14px; }
+  .bk-card h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #46d3ff; font-weight: 600; }
+  .bk-kv { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 14px; }
+  .bk-kv span:first-child { color: #a9c4cd; }
+  .bk-kv span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .bk-kv.total { margin-top: 6px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.15); font-size: 17px; font-weight: 700; }
+  .bk-kv.total span:first-child { color: #fff; }
+  .bk-pay { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; color: inherit; padding: 12px; margin-top: 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2); background: transparent; cursor: pointer; }
+  .bk-pay .dot { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); }
+  .bk-pay[aria-checked="true"] { border-color: #46d3ff; background: rgba(70,211,255,.1); }
+  .bk-pay[aria-checked="true"] .dot { border-color: #46d3ff; background: radial-gradient(circle, #46d3ff 45%, transparent 50%); }
+  .bk-pay small { display: block; color: #a9c4cd; font-size: 12px; }
+  .bk-ok { text-align: center; font-size: 20px; font-weight: 700; color: #7be0a5; margin-bottom: 4px; }
+  .bk-okja { text-align: center; font-size: 13px; color: #a9c4cd; margin-bottom: 16px; }
+  .bk-ticket { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; padding: 16px; border-radius: 16px; background: linear-gradient(135deg, #12303a, #0c1d24); border: 1px solid rgba(70,211,255,.5); box-shadow: 0 0 30px rgba(70,211,255,.15); }
+  .bk-ticket .mv { font-size: 18px; font-weight: 800; line-height: 1.2; }
+  .bk-ticket .mvja { font-size: 13px; color: #a9c4cd; margin-bottom: 10px; }
+  .bk-ticket svg { width: 104px; height: 104px; border-radius: 8px; background: #fff; }
+  .bk-ticket .code { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,.3); font-size: 12px; color: #a9c4cd; }
+  .bk-ticket .code b { font-size: 20px; letter-spacing: .12em; color: #fff; }
+  @media (prefers-reduced-motion: reduce) { .booking, .booking.open { transition: none; } }
+</style>
+</head>
+<body>
+
+<div id="loading">LOADING…</div>
+
+<main class="stage" id="stage" aria-label="Animated Godzilla Minus Zero poster. Tap to make Godzilla stomp the ship and play the theme. Press and hold for Godzilla's scream. Shake your phone, or wiggle your mouse, for showtimes at TOHO Cinemas in Tokyo. Tilt your phone to look around.">
+  <div class="ui">
+    <button id="enable" class="hidden" type="button">Tap to enable motion</button>
+    <div id="hint" class="hint hidden"></div>
+  </div>
+</main>
+
+<section class="sheet" id="sheet" role="dialog" aria-label="Showtimes" aria-hidden="true">
+  <button class="close" id="sheetClose" type="button" aria-label="Close showtimes">&times;</button>
+  <div class="kicker">ゴジラ-0.0 &middot; G-0.0</div>
+  <h2 id="venue"></h2>
+  <div class="venueJa" id="venueJa"></div>
+  <div class="venues" id="venues" role="group" aria-label="Choose a TOHO Cinemas theater"></div>
+  <div class="days" id="days" role="group" aria-label="Choose a day"></div>
+  <div class="date" id="dateEn"></div>
+  <div class="dateJa" id="dateJa"></div>
+  <div class="times" id="times"></div>
+  <p class="tapHint">Tap a showtime to try the seat selection and ticket mockup. / 上映時間をタップすると、座席選択・購入のモックをお試しいただけます。</p>
+  <a class="official" id="officialLink" target="_blank" rel="noopener"></a>
+  <p class="note" id="note"></p>
+</section>
+
+<section class="booking" id="booking" role="dialog" aria-modal="true" aria-label="Book tickets (mockup)" aria-hidden="true">
+  <div class="bk-wrap">
+    <header class="bk-head">
+      <button class="bk-round" id="bkBack" type="button" aria-label="Back">&larr;</button>
+      <div class="ttl">
+        <div class="kicker">ゴジラ-0.0 &middot; Ticket mockup</div>
+        <div id="bkTheater"></div>
+        <div id="bkWhen"></div>
+      </div>
+      <button class="bk-round" id="bkClose" type="button" aria-label="Close booking">&times;</button>
+    </header>
+    <ol class="bk-steps" id="bkSteps"></ol>
+    <div class="bk-body" id="bkBody"></div>
+    <footer class="bk-foot" id="bkFoot">
+      <div class="bk-sum"><b id="bkSumTotal"></b><span id="bkSumInfo"></span></div>
+      <button class="bk-primary" id="bkNext" type="button"></button>
+    </footer>
+  </div>
+</section>
+
+<script>
+/* ======================= EDIT THESE ======================= */
+
+/*
+  Pivot points are "x% y%" of the WHOLE canvas (0% 0% = top-left, 100% 100% = bottom-right).
+  These are estimates read off the finished poster. If something swings from the wrong spot, nudge the numbers.
+*/
+const SHOULDER_L = "21% 33%";   // where the left arm (left of the poster) joins the body
+const SHOULDER_R = "75% 28%";   // where the right arm joins the body
+const HIP        = "40% 53%";   // where the left leg (the stomping one) joins the body
+const TAIL_BASE  = "71% 55%";   // where the tail joins the body
+const SHIP_FRONT_PIVOT = "54% 83%";  // the break in the front (left) half of the ship: its inner end
+const SHIP_BACK_PIVOT  = "77% 74%";  // the break in the back (right) half of the ship: its inner end
+const EXPLOSION_AT     = "66% 72%";  // centre of the explosion (embers are born here)
+const SPLASH_AT        = "74% 85%";  // centre of the splashes
+
+/*
+  LAYERS: list from BACK to FRONT (the order of lines = stacking order).
+  depth   0 = barely moves, 1+ = moves the most (tilt / mouse parallax)
+  kind    what the script does with the layer (tail, armL, armR, leg, ship, ocean, splash, explosion, smoke, ember, glow)
+  origin  pivot / scale centre
+  pad     extra edge cover (fraction of image width) for layers that slide around and must never show an edge
+*/
+const BODY = { depth: 0.24 };
+
+function copies(id, src, n, props) {      // n stacked copies of one file (it is only downloaded once)
+  return Array.from({ length: n }, (_, i) => ({ id: id + i, src, copy: i, copies: n, ...props }));
+}
+
+const EMBER_COPIES = 3;                   // how many embers waves overlap (more = denser stream, a little heavier)
+const SMOKE_COPIES = 2;                   // keep at 2: they cross-fade into each other for a seamless loop
+
+const LAYERS = [
+  { id: "background", src: "layer1-godzilla-background.png", depth: 0.10 },
+
+  { id: "tail",       src: "layer2-godzilla-tail.png",       depth: 0.16, kind: "tail", origin: TAIL_BASE },
+  { id: "tailspines", src: "layer2-godzilla-tailspines.png", depth: 0.16, kind: "tail", origin: TAIL_BASE },
+  // Glow for the tail spines: pulses together with the back spines, and sways with the tail
+  { id: "tailSpinesGlow", src: "layer2-godzilla-tailspines.png", depth: 0.16, kind: "glow", glow: "spines", tail: true,
+    origin: TAIL_BASE, filter: "brightness(2.1) saturate(1.5)" },
+
+  { id: "body",     src: "layer3-godzilla-body01.png",     ...BODY },
+  { id: "leftArm",  src: "layer3-godzilla-leftarm02.png",  ...BODY, kind: "armL", origin: SHOULDER_L },
+  { id: "rightArm", src: "layer3-godzilla-rightarm03.png", ...BODY, kind: "armR", origin: SHOULDER_R },
+  { id: "spines",   src: "layer3-godzilla-spines04.png",   ...BODY },
+  // Glow = a brightened copy of the layer whose opacity pulses (no heavy per-frame filter work)
+  { id: "spinesGlow",     src: "layer3-godzilla-spines04.png", ...BODY, kind: "glow", glow: "spines",
+    filter: "brightness(2.1) saturate(1.5)" },
+  { id: "highlights",     src: "layer4-godzilla-highlights.png", ...BODY },
+  { id: "highlightsGlow", src: "layer4-godzilla-highlights.png", ...BODY, kind: "glow", glow: "highlights",
+    filter: "brightness(1.9) saturate(1.3)" },
+
+  ...copies("smoke", "layer5-godzilla-smoke.png", SMOKE_COPIES, { depth: 0.28, kind: "smoke" }),
+
+  { id: "ocean",      src: "layer6-godzilla-ocean.png",        depth: 0.36, kind: "ocean", pad: 0.012 },
+  { id: "backSplash", src: "layer7-godzilla-back_splash.png",  depth: 0.38, kind: "splash", origin: SPLASH_AT, pad: 0.012 },
+  { id: "backShip",   src: "layer8-godzilla-back_ship.png",    depth: 0.40, kind: "ship", origin: SHIP_BACK_PIVOT },
+  { id: "frontShip",  src: "layer9-godzilla-front_ship.png",   depth: 0.46, kind: "ship", origin: SHIP_FRONT_PIVOT },
+  { id: "leftLeg",    src: "layer10-godzilla-left_leg.png",    ...BODY, kind: "leg", origin: HIP },
+  { id: "explosion",  src: "layer11-godzilla-explosion.png",   depth: 0.46, kind: "explosion", origin: EXPLOSION_AT },
+  { id: "frontSplash",src: "layer12-godzilla-front_splash.png",depth: 0.50, kind: "splash", origin: SPLASH_AT, pad: 0.012 },
+
+  ...copies("embers", "layer13-godzilla-embers.png", EMBER_COPIES, { depth: 0.52, kind: "ember", origin: EXPLOSION_AT })
+];
+
+// ---- Movement feel (tilt on phone, pointer position on desktop) ----
+const MAX_SHIFT = 0.02;      // front-layer travel as a fraction of image width
+const TILT_RANGE = 20;       // degrees of phone tilt for full movement
+const SMOOTHING = 0.08;      // 0.04 = floaty, 0.15 = snappy
+const DIRECTION = 1;         // set to -1 if the movement feels backwards
+
+// ---- The stomp (plays on tap) ----
+const STOMP_WINDUP = 0.55;   // seconds the leg takes to rise
+const STOMP_STRIKE = 0.12;   // seconds the foot takes to slam down
+const STOMP_HOLD = 0.60;     // seconds the ship stays pressed under the foot before it is released
+const STOMP_LOCK = 2.2;      // seconds before another tap can start a new stomp
+const LEG_LIFT_DEG = 5;      // how far the leg swings up from the hip (degrees)
+const LEG_LIFT_Y = 0.006;    // how much the whole leg rises (fraction of image height)
+const LEG_PRESS_DEG = -1.4;  // how far past rest the foot pushes when it lands
+const LEG_PRESS_Y = 0.007;   // how far the leg sinks when it lands
+const LEG_RELEASE = 0.55;    // seconds for the leg to ease back to rest
+const ARM_WIND = 3;          // degrees the arms swing outward during the wind-up
+const ARM_SNAP = 2.6;        // degrees they snap inward when the foot lands, then settle
+const ARM_IDLE = 0.3;        // tiny always-on arm sway (degrees)
+
+// ---- Ship: folds in on itself when stepped on, floats back up ----
+const SHIP_FOLD_FRONT = 4.5; // degrees the front half folds (its outer end rises)
+const SHIP_FOLD_BACK = -4.0; // degrees the back half folds
+const SHIP_DIP = 0.010;      // how far the front half is pushed down into the water (fraction of image height)
+const SHIP_DIP_BACK = 0.007; // same for the back half
+const SHIP_KICK = 0.22;      // extra downward shove at the moment of impact
+const BUOY_STIFF = 70;       // buoyancy spring: higher = snaps back faster
+const BUOY_DAMP = 6.5;       // buoyancy damping: lower = bobs longer after the hit
+const BOB_AMOUNT = 0.0016;   // idle floating (fraction of image height)
+const ROCK_DEG = 0.3;        // idle rocking (degrees)
+
+// ---- Impact reactions ----
+const SPLASH_POP = 0.07;     // splash grows by this much on impact (0 = none)
+const SPLASH_RISE = 0.012;   // and rises by this (fraction of image height)
+const EXPLOSION_POP = 0.06;  // explosion swells on impact
+const EXPLOSION_FLICKER = 0.008; // idle flame flicker
+const CAMERA_SHAKE = 0.004;  // how hard the whole poster jolts on impact (fraction of image width, 0 = none)
+
+// ---- Other idle motion ----
+const TAIL_SWAY_DEG = 1.6;   // how far the tail swings each way
+const TAIL_PERIOD = 6.5;     // seconds per sway
+const OCEAN_DRIFT = 0.003;   // sideways drift of the water (fraction of image width)
+const OCEAN_BOB = 0.0012;    // gentle rise and fall of the water
+
+// ---- Smoke: drifts toward the upper-left corner when neutral ----
+const SMOKE_PERIOD = 18;     // seconds for one wisp to cross
+const SMOKE_TRAVEL = 0.12;   // how far it travels (fraction of image width)
+const SMOKE_WAVE = 0.012;    // sideways waft
+const SMOKE_OPACITY = 1;
+const SMOKE_TILT_FOLLOW = 0.8; // 0 = always upper-left; 1 = follows the tilt direction completely when tilted
+
+// ---- Embers: born at the explosion, drift to the right ----
+const EMBER_PERIOD = 4.6;    // seconds for one wave of embers
+const EMBER_DRIFT = 0.08;    // how far right they travel (fraction of image width)
+const EMBER_RISE = 0.025;    // how far up they float (fraction of image height)
+const EMBER_OPACITY = 0.95;
+const EMBER_BOOST = 2.0;     // how much faster/brighter they get right after an impact
+
+// ---- Glow: spines and highlights, at random intervals ----
+const GLOW_GAP = [3.5, 9];   // random wait between glows (min, max seconds)
+const GLOW_FIRST = 2.0;      // seconds before the first glow
+const GLOW_RISE = 0.22;      // seconds to brighten
+const GLOW_FALL = 1.1;       // seconds to fade
+const GLOW_HIGHLIGHT_DELAY = 0.12;  // highlights follow the spines by this long
+const GLOW_SPINES_MAX = 0.95;
+const GLOW_HIGHLIGHTS_MAX = 0.85;
+
+// ---- Music: tap to play, tap again to pause, double-tap to reset ----
+const AUDIO_SRC = "Godzilla - Main Theme.mp3";   // keep this file in the same folder as the page
+const AUDIO_START = 0;              // seconds into the song where it begins
+const AUDIO_LENGTH = 50;            // seconds to play from there (0 = the whole song)
+const AUDIO_FADE = 1.5;             // seconds of fade-out at the end of the clip (not possible on iPhones)
+const AUDIO_VOLUME = 1;             // 0 to 1
+const AUDIO_LOOP = false;           // true = the clip repeats until you pause it
+const STOMP_ON_PAUSE_TAP = true;    // true = the tap that pauses the music also triggers a stomp; false = only taps that start the music do
+const DOUBLE_TAP_RESTARTS = false;  // false = double-tap rewinds and stays paused; true = rewinds and plays again
+const DOUBLE_TAP_RECENTERS = true;  // double-tap also re-centers the tilt
+const TAP_MAX_MOVE = 14;            // pixels a finger/mouse may move and still count as a tap
+const DOUBLE_TAP_TIME = 0.35;       // seconds between two taps to count as a double-tap
+
+// ---- Ticket booking mockup (opens when a showtime is tapped). Nothing here is real:
+//      no payment is taken, no personal details are asked for, and nothing leaves the page. ----
+const MOVIE_EN = "Godzilla Minus Zero";
+const MOVIE_JA = "ゴジラ-0.0";
+const TICKET_TYPES = [                       // sample prices in yen
+  { id: "adult",   en: "General",              ja: "一般",           price: 2000 },
+  { id: "college", en: "College / Vocational", ja: "大学生・専門学生", price: 1500 },
+  { id: "youth",   en: "High school & under",  ja: "高校生以下",      price: 1000 },
+  { id: "senior",  en: "Senior (60+)",         ja: "シニア(60歳以上)", price: 1300 }
+];
+const MAX_TICKETS = 6;                       // per booking
+const SEAT_ROWS = "ABCDEFGHIJ";              // front to back
+const SEAT_BLOCKS = [3, 8, 3];               // seats in the left / centre / right sections (gaps between them are aisles)
+const SOLD_RATIO = 0.3;                      // share of seats already taken (0 to 1)
+const HOLD_MINUTES = 10;                     // how long chosen seats are "held" (the countdown on the seat and review steps)
+const ALLOW_PAST_SHOWTIMES = true;           // true = every showtime can be tried, even ones earlier today (handy for demos)
+const PAYMENT_METHODS = [
+  { id: "card",   en: "Credit card",        ja: "クレジットカード" },
+  { id: "wallet", en: "Apple Pay / Google Pay", ja: "モバイルウォレット" },
+  { id: "konbini", en: "Convenience store",  ja: "コンビニ払い" }
+];
+
+// ---- Scream: press and hold to play ----
+const SCREAM_SRC = "Godzilla Scream.mp3";   // keep this file in the same folder as the page (change the name if yours differs)
+const SCREAM_VOLUME = 1;            // 0 to 1
+const LONG_PRESS_TIME = 0.5;        // seconds you must hold before the scream counts
+
+// ---- Shake (phone) / wiggle (mouse) -> showtimes ----
+const SHAKE_THRESHOLD = 22;  // how hard each jolt must be (lower = easier)
+const SHAKE_SPIKES = 3;      // jolts within SHAKE_WINDOW that count as a shake
+const SHAKE_WINDOW = 0.6;    // seconds
+const MOUSE_MIN_STROKE = 40; // pixels per back-and-forth stroke
+const MOUSE_STROKES = 4;     // strokes within MOUSE_WINDOW that count as a shake
+const MOUSE_WINDOW = 0.8;    // seconds
+const SHAKE_COOLDOWN = 1.0;  // seconds before another shake is accepted
+const SHEET_AUTOHIDE = 0;    // seconds until the showtimes close by themselves (0 = stay until closed)
+
+// ---- Showtimes (SAMPLE DATA for a concept piece, replace with real ones if you ever need them) ----
+// TOHO Cinemas in Tokyo. "screens" = how many screens the theater has (sample screen numbers stay within it).
+// "url" = that theater's official schedule page (the sheet falls back to tohotheater.jp when it's missing).
+// Each theater gets the base times below nudged by a few minutes so they look different. To use real times for one
+// theater, give it its own  weekday: [...]  and  weekend: [...]  lists, like { time: "09:20", screen: "Screen 1" }.
+const THEATERS = [
+  { id: "hibiya",    name: "TOHO Cinemas Hibiya",        nameJa: "TOHOシネマズ 日比谷",       area: "Chiyoda \u00B7 \u5343\u4EE3\u7530", screens: 13 },
+  { id: "chanter",   name: "TOHO Cinemas Chanter",       nameJa: "TOHOシネマズ シャンテ",     area: "Chiyoda \u00B7 \u5343\u4EE3\u7530", screens: 3 },
+  { id: "shinjuku",  name: "TOHO Cinemas Shinjuku",      nameJa: "TOHOシネマズ 新宿",         area: "Shinjuku \u00B7 \u65B0\u5BBF", screens: 12,
+    url: "https://hlo.tohotheater.jp/net/schedule/076/TNPI2000J01.do" },
+  { id: "shibuya",   name: "TOHO Cinemas Shibuya",       nameJa: "TOHOシネマズ 渋谷",         area: "Shibuya \u00B7 \u6E0B\u8C37", screens: 6,
+    url: "https://hlo.tohotheater.jp/net/schedule/043/TNPI2000J01.do" },
+  { id: "roppongi",  name: "TOHO Cinemas Roppongi Hills", nameJa: "TOHOシネマズ 六本木ヒルズ", area: "Minato \u00B7 \u6E2F", screens: 9,
+    url: "https://hlo.tohotheater.jp/net/schedule/009/TNPI2000J01.do" },
+  { id: "nihonbashi",name: "TOHO Cinemas Nihonbashi",    nameJa: "TOHOシネマズ 日本橋",       area: "Chuo \u00B7 \u4E2D\u592E", screens: 9,
+    url: "https://hlo.tohotheater.jp/net/schedule/073/TNPI2000J01.do" },
+  { id: "ueno",      name: "TOHO Cinemas Ueno",          nameJa: "TOHOシネマズ 上野",         area: "Taito \u00B7 \u53F0\u6771", screens: 8 },
+  { id: "ikebukuro", name: "TOHO Cinemas Ikebukuro",     nameJa: "TOHOシネマズ 池袋",         area: "Toshima \u00B7 \u8C4A\u5CF6", screens: 10 },
+  { id: "oimachi",   name: "TOHO Cinemas Oimachi",       nameJa: "TOHOシネマズ 大井町",       area: "Shinagawa \u00B7 \u54C1\u5DDD", screens: 8 },
+  { id: "kinshicho", name: "TOHO Cinemas Olinas Kinshicho", nameJa: "TOHOシネマズ オリナス錦糸町", area: "Sumida \u00B7 \u58A8\u7530", screens: 8 },
+  { id: "nishiarai", name: "TOHO Cinemas Nishiarai",     nameJa: "TOHOシネマズ 西新井",       area: "Adachi \u00B7 \u8DB3\u7ACB", screens: 10 },
+  { id: "fuchu",     name: "TOHO Cinemas Fuchu",         nameJa: "TOHOシネマズ 府中",         area: "Fuchu \u00B7 \u5E9C\u4E2D", screens: 9 },
+  { id: "minamiosawa", name: "TOHO Cinemas Minami-Osawa", nameJa: "TOHOシネマズ 南大沢",      area: "Hachioji \u00B7 \u516B\u738B\u5B50", screens: 9 }
+];
+const DEFAULT_THEATER = "hibiya";    // the theater shown the first time the sheet opens
+const OFFICIAL_FALLBACK = "https://www.tohotheater.jp/";
+const SHOWTIMES_WEEKDAY = [
+  { time: "09:20", screen: 1 }, { time: "11:55", screen: 2 }, { time: "14:30", screen: 1 },
+  { time: "17:05", screen: 3 }, { time: "19:40", screen: 1 }, { time: "22:15", screen: 2 }
+];
+const SHOWTIMES_WEEKEND = [
+  { time: "08:40", screen: 2 }, { time: "10:50", screen: 1 }, { time: "13:20", screen: 3 },
+  { time: "15:45", screen: 1 }, { time: "18:10", screen: 2 }, { time: "20:35", screen: 1 },
+  { time: "22:55", screen: 3 }
+];
+const SHOW_DAYS = 7;                 // how many days (starting today) can be picked on the showtimes sheet
+const SHOW_SAMPLE_NOTICE = true;     // keeps the "sample data" line on the sheet (recommended)
+
+/* ======================= CODE ======================= */
+
+const stage = document.getElementById("stage");
+const ui = stage.querySelector(".ui");
+const enableBtn = document.getElementById("enable");
+const hint = document.getElementById("hint");
+const loadingEl = document.getElementById("loading");
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, u) => a + (b - a) * u;
+const rand = ([a, b]) => a + Math.random() * (b - a);
+const TAU = Math.PI * 2;
+const smooth = u => { u = clamp(u, 0, 1); return u * u * (3 - 2 * u); };
+
+/* ---------- Build the layers ---------- */
+
+const layers = LAYERS.map((cfg, i) => {
+  const img = new Image();
+  img.className = "layer";
+  img.alt = "";
+  img.draggable = false;
+  img.decoding = "async";
+  img.src = cfg.src;
+  img.style.transformOrigin = cfg.origin || "50% 50%";
+  if (cfg.filter) img.style.filter = cfg.filter;
+  // glow overlays and the extra smoke/ember waves start hidden; the first wave is visible so reduced-motion still shows them
+  const firstWave = (cfg.kind === "smoke" || cfg.kind === "ember") && cfg.copy === 0;
+  if (cfg.kind === "glow" || ((cfg.kind === "smoke" || cfg.kind === "ember") && !firstWave)) {
+    img.style.opacity = 0; img.style.visibility = "hidden";
+  }
+  stage.insertBefore(img, ui);
+  return { ...cfg, el: img, shift: 0, phase: i * 1.7, lastOp: -1 };
+});
+const byId = id => layers.find(l => l.id === id);
+
+function setAspect() {
+  const first = layers[0].el;
+  if (first.naturalWidth) stage.style.setProperty("--ar", first.naturalWidth / first.naturalHeight);
+  sizeLayers();
+}
+layers[0].el.addEventListener("load", setAspect);
+if (layers[0].el.complete) setAspect();
+
+// Each layer is enlarged by the distance it can travel, so edges never show.
+function sizeLayers() {
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  layers.forEach(l => {
+    l.shift = l.depth * MAX_SHIFT * w;
+    const pad = l.shift + (l.pad || 0) * w;
+    l.pad_px = pad;
+    l.el.style.left = -pad + "px";
+    l.el.style.top = -pad + "px";
+    l.el.style.width = (w + pad * 2) + "px";
+    l.el.style.height = (h + pad * 2) + "px";
+  });
+}
+new ResizeObserver(sizeLayers).observe(stage);
+
+/* ---------- Shared state ---------- */
+
+let tx = 0, ty = 0, cx = 0, cy = 0;     // tilt target and smoothed tilt (-1..1)
+let lastT = null;
+
+let stompStart = -99, impactAt = -99, impactFired = false;
+let smokeT = 0, emberT = 0;
+let sdx = -0.7071, sdy = -0.7071;       // current smoke direction (starts toward the upper-left corner)
+
+// Ship physics (spring = buoyancy)
+const ships = {
+  frontShip: { a: 0, aV: 0, y: 0, yV: 0, foldTo: SHIP_FOLD_FRONT, dipTo: SHIP_DIP },
+  backShip:  { a: 0, aV: 0, y: 0, yV: 0, foldTo: SHIP_FOLD_BACK,  dipTo: SHIP_DIP_BACK }
+};
+
+let glowStart = -99, nextGlow = GLOW_FIRST;
+
+/* ---------- Animation helpers ---------- */
+
+// Pose of leg and arms at p seconds after the tap
+function stompPose(p) {
+  const W1 = STOMP_WINDUP, S1 = STOMP_WINDUP + STOMP_STRIKE;
+  let leg = 0, legY = 0, armW = 0;
+  if (p < 0) return { leg, legY, armW };
+  if (p < W1) {                                          // wind-up: leg rises, arms swing out
+    const u = smooth(p / W1);
+    leg = LEG_LIFT_DEG * u; legY = -LEG_LIFT_Y * u; armW = ARM_WIND * u;
+  } else if (p < S1) {                                   // strike: foot slams down, arms snap in
+    const u = (p - W1) / STOMP_STRIKE, e = u * u;
+    leg = lerp(LEG_LIFT_DEG, LEG_PRESS_DEG, e); legY = lerp(-LEG_LIFT_Y, LEG_PRESS_Y, e); armW = lerp(ARM_WIND, -ARM_SNAP, e);
+  } else {                                               // release: leg eases back, arms settle with a wobble
+    const q = p - S1;
+    const d = Math.exp(-q / LEG_RELEASE);
+    leg = LEG_PRESS_DEG * d; legY = LEG_PRESS_Y * d;
+    armW = -ARM_SNAP * Math.exp(-q / 0.7) * Math.cos(q * TAU * 1.3);
+  }
+  return { leg, legY, armW };
+}
+
+// 0 -> quick rise -> slow fall, for splashes / explosion after the impact
+function burst(q) { return q < 0 ? 0 : (1 - Math.exp(-q * 30)) * Math.exp(-q * 3.2); }
+
+function startStomp(t) {
+  if (t - stompStart < STOMP_LOCK) return;
+  stompStart = t;
+  impactAt = t + STOMP_WINDUP + STOMP_STRIKE;
+  impactFired = false;
+}
+
+function updateShips(dt, q) {
+  const hold = q >= 0 && q < STOMP_HOLD;
+  if (q >= 0 && !impactFired) {                         // the moment the foot lands: shove both halves down
+    impactFired = true;
+    for (const k in ships) ships[k].yV += SHIP_KICK;
+  }
+  for (const k in ships) {
+    const s = ships[k];
+    const tgtA = hold ? s.foldTo : 0, tgtY = hold ? s.dipTo : 0;
+    // two springs (fold angle and height): the underdamped spring is the buoyancy, so they bob after the hit
+    s.aV += (-BUOY_STIFF * (s.a - tgtA) - BUOY_DAMP * s.aV) * dt;  s.a += s.aV * dt;
+    s.yV += (-BUOY_STIFF * 0.7 * (s.y - tgtY) - BUOY_DAMP * 0.8 * s.yV) * dt;  s.y += s.yV * dt;
+  }
+}
+
+function glowEnv(u) {
+  if (u <= 0) return 0;
+  if (u < GLOW_RISE) return smooth(u / GLOW_RISE);
+  if (u < GLOW_RISE + GLOW_FALL) return 1 - smooth((u - GLOW_RISE) / GLOW_FALL);
+  return 0;
+}
+
+/* ---------- Main loop ---------- */
+
+function frame(now) {
+  const t = now / 1000;
+  const dt = lastT == null ? 0 : Math.min(t - lastT, 0.05);
+  lastT = t;
+  const W = stage.clientWidth, H = stage.clientHeight;
+
+  cx += (tx - cx) * SMOOTHING;
+  cy += (ty - cy) * SMOOTHING;
+  const tiltMag = Math.hypot(cx, cy);
+
+  // stomp, ship, impact reactions
+  const S = stompPose(t - stompStart);
+  const q = t - impactAt;                               // seconds since the foot landed (negative before)
+  updateShips(dt, q);
+  const bu = burst(q);
+  const boost = q >= 0 ? Math.exp(-q / 1.3) : 0;
+  const camX = CAMERA_SHAKE * W * (q >= 0 ? Math.exp(-q * 7) * Math.sin(q * 55) : 0);
+  const camY = CAMERA_SHAKE * W * 0.7 * (q >= 0 ? Math.exp(-q * 7) * Math.cos(q * 47) : 0);
+
+  // ocean idle (splashes ride on it)
+  const oceanDx = Math.sin(t * TAU / 9) * OCEAN_DRIFT * W;
+  const oceanDyF = Math.sin(t * TAU / 6.5) * OCEAN_BOB + ships.frontShip.y * 0.35;
+
+  // smoke direction: upper-left when neutral, leaning toward the tilt when tilted
+  {
+    const a = clamp((tiltMag - 0.12) / 0.4, 0, 1) * SMOKE_TILT_FOLLOW;
+    let tx_ = -0.7071, ty_ = -0.7071;
+    if (a > 0 && tiltMag > 1e-4) { tx_ = lerp(tx_, cx / tiltMag, a); ty_ = lerp(ty_, cy / tiltMag, a); }
+    const len = Math.hypot(tx_, ty_) || 1;
+    const k = 1 - Math.exp(-dt * 1.5);
+    sdx += (tx_ / len - sdx) * k; sdy += (ty_ / len - sdy) * k;
+  }
+  smokeT += dt / SMOKE_PERIOD;
+  emberT += dt * (1 + EMBER_BOOST * boost) / EMBER_PERIOD;
+
+  const tailRot = TAIL_SWAY_DEG * (Math.sin(t * TAU / TAIL_PERIOD) + 0.25 * Math.sin(t * TAU * 2.3 / TAIL_PERIOD + 1.1));
+
+  // random glow of the spines and highlights
+  if (t >= nextGlow) { glowStart = t; nextGlow = t + GLOW_RISE + GLOW_FALL + rand(GLOW_GAP); }
+  const gSpines = glowEnv(t - glowStart) * GLOW_SPINES_MAX;
+  const gHigh = glowEnv(t - glowStart - GLOW_HIGHLIGHT_DELAY) * GLOW_HIGHLIGHTS_MAX;
+
+  for (const l of layers) {
+    const layerH = H + 2 * l.pad_px;
+    let dx = -cx * l.shift * DIRECTION + camX;
+    let dy = -cy * l.shift * DIRECTION + camY;
+    let rot = 0, sc = 1, op = null;
+
+    switch (l.kind) {
+      case "tail":
+        rot = tailRot;
+        break;
+      case "armL":
+        rot = S.armW + ARM_IDLE * Math.sin(t * TAU / 4.6);
+        break;
+      case "armR":
+        rot = -S.armW + ARM_IDLE * Math.sin(t * TAU / 5.1 + 1.4);
+        break;
+      case "leg":
+        rot = S.leg; dy += S.legY * layerH;
+        break;
+      case "ship": {
+        const s = ships[l.id];
+        const ph = l.id === "frontShip" ? 0 : 2.1;
+        dy += (s.y + BOB_AMOUNT * Math.sin(t * TAU / 5.2 + ph)) * layerH;
+        rot = s.a + ROCK_DEG * Math.sin(t * TAU / 6.1 + ph + 0.8);
+        break;
+      }
+      case "ocean":
+        dx += oceanDx; dy += oceanDyF * layerH;
+        break;
+      case "splash":
+        dx += oceanDx; dy += (oceanDyF - SPLASH_RISE * bu) * layerH;
+        sc = 1 + SPLASH_POP * bu;
+        break;
+      case "explosion":
+        sc = 1 + EXPLOSION_POP * bu + EXPLOSION_FLICKER * Math.sin(t * TAU * 6.5);
+        break;
+      case "smoke": {
+        const p = (smokeT + l.copy / l.copies) % 1;
+        const along = (p - 0.5) * SMOKE_TRAVEL * W;
+        const perp = Math.sin(p * TAU * 1.5 + l.copy) * SMOKE_WAVE * W;
+        dx += sdx * along - sdy * perp;
+        dy += sdy * along + sdx * perp;
+        sc = 1 + SMOKE_TRAVEL * 1.15;                   // slightly oversized so its edge never shows
+        const s2 = Math.sin(Math.PI * p);
+        op = SMOKE_OPACITY * s2 * s2;
+        break;
+      }
+      case "ember": {
+        const p = (emberT + l.copy / l.copies) % 1;
+        dx += EMBER_DRIFT * p * W;
+        dy -= EMBER_RISE * p * layerH;
+        sc = 0.5 + 0.55 * p;                            // grows outward from the explosion
+        op = clamp(Math.min(p / 0.12, (1 - p) / 0.5), 0, 1) * clamp(EMBER_OPACITY + 0.3 * boost, 0, 1);
+        break;
+      }
+      case "glow":
+        op = l.glow === "spines" ? gSpines : gHigh;
+        if (l.tail) rot = tailRot;                      // the tail's glow copy follows the tail's sway exactly
+        break;
+    }
+
+    l.el.style.transform = "translate3d(" + dx + "px," + dy + "px,0) rotate(" + rot + "deg) scale(" + sc + ")";
+
+    if (op !== null) {
+      op = Math.round(op * 1000) / 1000;
+      if (op !== l.lastOp) {
+        l.el.style.opacity = op;
+        l.el.style.visibility = op < 0.004 ? "hidden" : "visible";
+        l.lastOp = op;
+      }
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Input: mouse and tilt ---------- */
+
+stage.addEventListener("pointermove", e => {
+  if (e.pointerType === "touch" || reduceMotion) return;
+  const r = stage.getBoundingClientRect();
+  tx = clamp(((e.clientX - r.left) / r.width) * 2 - 1, -1, 1);
+  ty = clamp(((e.clientY - r.top) / r.height) * 2 - 1, -1, 1);
+});
+stage.addEventListener("pointerleave", e => {
+  if (e.pointerType !== "touch") { tx = 0; ty = 0; }
+});
+
+let base = null;
+let gotSensor = false, gotMotion = false;
+
+function onOrientation(e) {
+  if (e.gamma == null || e.beta == null || reduceMotion) return;
+  gotSensor = true;
+  if (!base) base = { g: e.gamma, b: e.beta };
+  tx = clamp((e.gamma - base.g) / TILT_RANGE, -1, 1);
+  ty = clamp((e.beta - base.b) / TILT_RANGE, -1, 1);
+}
+
+function showHint(text, ms) {
+  hint.textContent = text;
+  hint.classList.remove("hidden", "fade");
+  clearTimeout(showHint.t);
+  showHint.t = setTimeout(() => {
+    hint.classList.add("fade");
+    setTimeout(() => hint.classList.add("hidden"), 700);
+  }, ms);
+}
+
+/* ---------- Shake (phone) and wiggle (mouse) -> showtimes ---------- */
+
+let lastShake = -99;
+function onShake() {
+  const now = performance.now() / 1000;
+  if (now - lastShake < SHAKE_COOLDOWN) return;
+  lastShake = now;
+  if (navigator.vibrate) navigator.vibrate(15);
+  toggleSheet();
+}
+
+let spikes = [], lastAcc = null;
+function onMotion(e) {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x == null) return;
+  gotMotion = true;
+  if (lastAcc) {
+    const jolt = Math.abs(a.x - lastAcc.x) + Math.abs(a.y - lastAcc.y) + Math.abs(a.z - lastAcc.z);
+    const t = performance.now() / 1000;
+    if (jolt > SHAKE_THRESHOLD) spikes.push(t);
+    spikes = spikes.filter(s => t - s <= SHAKE_WINDOW);
+    if (spikes.length >= SHAKE_SPIKES) { spikes = []; onShake(); }
+  }
+  lastAcc = { x: a.x, y: a.y, z: a.z };
+}
+
+const mouseAxes = { x: { dir: 0, ext: 0 }, y: { dir: 0, ext: 0 } };
+let strokes = [];
+function trackAxis(a, v, t) {
+  if (a.dir === 0) { a.dir = 1; a.ext = v; return; }
+  if ((v - a.ext) * a.dir > 0) { a.ext = v; return; }
+  if (Math.abs(v - a.ext) >= MOUSE_MIN_STROKE) { a.dir = -a.dir; a.ext = v; strokes.push(t); }
+}
+window.addEventListener("pointermove", e => {
+  if (e.pointerType !== "mouse" || reduceMotion) return;
+  const t = performance.now() / 1000;
+  trackAxis(mouseAxes.x, e.clientX, t);
+  trackAxis(mouseAxes.y, e.clientY, t);
+  strokes = strokes.filter(s => t - s <= MOUSE_WINDOW);
+  if (strokes.length >= MOUSE_STROKES) { strokes = []; onShake(); }
+});
+window.addEventListener("keydown", e => {           // handy for testing on a computer
+  if (bookingOpen) { if (e.key === "Escape") bkBack(); return; }
+  if (e.key === "s" || e.key === "S") toggleSheet();
+  else if (e.key === "Escape") closeSheet();
+});
+
+/* ---------- Showtimes sheet ---------- */
+
+const sheet = document.getElementById("sheet");
+let sheetOpen = false, sheetTimer = null;
+
+// "Now" in Tokyo, because the theatre is in Tokyo whatever the viewer's own time zone is
+function tokyoNow() {
+  const d = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tokyo", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  }).formatToParts(d);
+  const get = type => (parts.find(p => p.type === type) || {}).value;
+  return {
+    date: d,
+    weekday: get("weekday"),
+    minutes: parseInt(get("hour"), 10) * 60 + parseInt(get("minute"), 10)
+  };
+}
+
+// A calendar day in Tokyo, `offset` days from today (0 = today)
+function tokyoDay(offset) {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tokyo", year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date());
+  const g = type => parseInt(p.find(x => x.type === type).value, 10);
+  // noon UTC = 21:00 in Tokyo, so it is always the same calendar day there
+  const date = new Date(Date.UTC(g("year"), g("month") - 1, g("day") + offset, 12));
+  const f = (loc, o) => new Intl.DateTimeFormat(loc, { timeZone: "Asia/Tokyo", ...o }).format(date);
+  const wd = f("en-US", { weekday: "short" });
+  return {
+    offset, date, weekday: wd, weekend: wd === "Sat" || wd === "Sun",
+    iso: f("en-CA", {}),
+    num: f("en-US", { day: "numeric" }),
+    wdEn: offset === 0 ? "Today" : wd,
+    wdJa: offset === 0 ? "今日" : f("ja-JP", { weekday: "short" }),
+    dateEn: f("en-US", { weekday: "short", month: "short", day: "numeric" }),
+    dateJa: f("ja-JP", { month: "long", day: "numeric", weekday: "short" }),
+    longEn: f("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+    longJa: f("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" })
+  };
+}
+
+let dayOffset = 0;      // which day is selected on the sheet (resets to today each time the sheet opens)
+let venueId = DEFAULT_THEATER;
+try { const saved = localStorage.getItem("g00-theater"); if (THEATERS.some(t => t.id === saved)) venueId = saved; } catch (e) {}
+
+// Sample times for a theater: the base list nudged by a few minutes, with screen numbers that fit that theater
+function timesFor(theater, weekend) {
+  if (theater[weekend ? "weekend" : "weekday"]) return theater[weekend ? "weekend" : "weekday"];
+  const idx = THEATERS.indexOf(theater);
+  const nudge = [0, 5, 10, 15, 20, -5, -10][idx % 7];
+  return (weekend ? SHOWTIMES_WEEKEND : SHOWTIMES_WEEKDAY).map((s, k) => {
+    const [h, m] = s.time.split(":").map(Number);
+    const total = Math.min(23 * 60 + 59, h * 60 + m + nudge);
+    const hh = String(Math.floor(total / 60)).padStart(2, "0"), mm = String(total % 60).padStart(2, "0");
+    return { time: hh + ":" + mm, screen: "Screen " + (((s.screen - 1 + idx + k) % theater.screens) + 1) };
+  });
+}
+
+function renderVenues() {
+  const box = document.getElementById("venues");
+  box.textContent = "";
+  THEATERS.forEach(t => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = t.name.replace("TOHO Cinemas ", "");
+    b.setAttribute("aria-pressed", t.id === venueId ? "true" : "false");
+    b.addEventListener("click", () => {
+      venueId = t.id;
+      try { localStorage.setItem("g00-theater", venueId); } catch (e) {}
+      renderSheet();
+    });
+    box.appendChild(b);
+  });
+  const on = box.querySelector('[aria-pressed="true"]');
+  if (on) on.scrollIntoView({ inline: "center", block: "nearest" });
+}
+
+function renderDays() {
+  const box = document.getElementById("days");
+  box.textContent = "";
+  for (let i = 0; i < SHOW_DAYS; i++) {
+    const d = tokyoDay(i);
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = d.weekend ? "wkend" : "";
+    b.setAttribute("aria-pressed", i === dayOffset ? "true" : "false");
+    b.setAttribute("aria-label", d.longEn);
+    const w = document.createElement("span"); w.className = "dw"; w.textContent = d.wdEn;
+    const n = document.createElement("span"); n.className = "dn"; n.textContent = d.num;
+    const j = document.createElement("span"); j.className = "dj"; j.textContent = d.wdJa;
+    b.append(w, n, j);
+    b.addEventListener("click", () => {
+      dayOffset = i;
+      renderSheet();
+      const again = document.getElementById("days").children[i];
+      if (again) again.focus({ preventScroll: true });
+    });
+    box.appendChild(b);
+  }
+}
+
+function renderSheet() {
+  const now = tokyoNow();
+  const day = tokyoDay(dayOffset);
+  const theater = THEATERS.find(t => t.id === venueId) || THEATERS[0];
+  document.getElementById("venue").textContent = theater.name;
+  document.getElementById("venueJa").textContent = theater.nameJa + "  \u00B7  " + theater.area;
+  document.getElementById("dateEn").textContent = day.longEn;
+  document.getElementById("dateJa").textContent = day.longJa;
+  renderVenues();
+  renderDays();
+
+  const link = document.getElementById("officialLink");
+  link.href = theater.url || OFFICIAL_FALLBACK;
+  link.textContent = "Official schedule \u2192 / \u516C\u5F0F\u30B9\u30B1\u30B8\u30E5\u30FC\u30EB";
+
+  const list = timesFor(theater, day.weekend);
+  const box = document.getElementById("times");
+  box.textContent = "";
+  let nextMarked = false;
+  list.forEach(s => {
+    const [h, m] = s.time.split(":").map(Number);
+    const past = day.offset === 0 && h * 60 + m < now.minutes;   // only earlier times TODAY count as past
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip" + (past ? " past" : "");
+    chip.disabled = past && !ALLOW_PAST_SHOWTIMES;
+    chip.setAttribute("aria-label", day.dateEn + ", " + s.time + ", " + s.screen + ". Choose seats.");
+    chip.addEventListener("click", () => openBooking(theater, s, day));
+    if (!past && !nextMarked) { chip.classList.add("next"); nextMarked = true; }
+    const t = document.createElement("span"); t.className = "t"; t.textContent = s.time;
+    const sc = document.createElement("span"); sc.className = "s"; sc.textContent = s.screen;
+    chip.append(t, sc);
+    box.appendChild(chip);
+  });
+  const note = document.getElementById("note");
+  note.textContent = SHOW_SAMPLE_NOTICE
+    ? "Concept piece \u2013 these showtimes are examples, not real listings. / \u30B3\u30F3\u30BB\u30D7\u30C8\u4F5C\u54C1\u3067\u3059\u3002\u4E0A\u6620\u6642\u9593\u306F\u30B5\u30F3\u30D7\u30EB\u3067\u3001\u5B9F\u969B\u306E\u3082\u306E\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002"
+    : "";
+}
+
+function openSheet() {
+  dayOffset = 0;
+  renderSheet();
+  sheet.classList.add("open");
+  sheet.setAttribute("aria-hidden", "false");
+  sheetOpen = true;
+  clearTimeout(sheetTimer);
+  if (SHEET_AUTOHIDE > 0) sheetTimer = setTimeout(closeSheet, SHEET_AUTOHIDE * 1000);
+}
+function closeSheet() {
+  sheet.classList.remove("open");
+  sheet.setAttribute("aria-hidden", "true");
+  sheetOpen = false;
+  clearTimeout(sheetTimer);
+}
+function toggleSheet() { if (bookingOpen) return; sheetOpen ? closeSheet() : openSheet(); }
+document.getElementById("sheetClose").addEventListener("click", closeSheet);
+
+/* ---------- Ticket booking mockup (opens from a showtime) ---------- */
+
+const bkRoot = document.getElementById("booking");
+let bookingOpen = false;
+let bk = null;                 // the booking in progress
+let bkTick = null;
+const bkSold = {};             // seats "bought" during this visit, so they show as taken afterwards
+
+const bkYen = n => "\u00A5" + n.toLocaleString("en-US");
+function bkEl(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+// Same text always gives the same "random" numbers, so a showtime always shows the same taken seats
+function bkRand(str) {
+  let hh = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) { hh = Math.imul(hh ^ str.charCodeAt(i), 3432918353); hh = (hh << 13) | (hh >>> 19); }
+  let a = (Math.imul(hh ^ (hh >>> 16), 2246822507) ^ Math.imul(hh ^ (hh >>> 13), 3266489909)) >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const bkSeatTotal = () => SEAT_BLOCKS.reduce((a, b) => a + b, 0);
+function bkBlockOf(num) {
+  let n = num;
+  for (let b = 0; b < SEAT_BLOCKS.length; b++) { if (n <= SEAT_BLOCKS[b]) return b; n -= SEAT_BLOCKS[b]; }
+  return SEAT_BLOCKS.length - 1;
+}
+const bkTicketCount = () => TICKET_TYPES.reduce((a, t) => a + (bk.counts[t.id] || 0), 0);
+const bkTotal = () => TICKET_TYPES.reduce((a, t) => a + (bk.counts[t.id] || 0) * t.price, 0);
+function bkSeatSort(a, b) {
+  return a[0] === b[0] ? parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10) : (a[0] < b[0] ? -1 : 1);
+}
+
+function openBooking(theater, show, day) {
+  day = day || tokyoDay(0);
+  const key = [theater.id, day.iso, show.time, show.screen].join("|");
+  const rnd = bkRand(key);
+  const sold = new Set(bkSold[key] || []);
+  SEAT_ROWS.split("").forEach(r => {
+    for (let n = 1; n <= bkSeatTotal(); n++) if (rnd() < SOLD_RATIO) sold.add(r + n);
+  });
+  bk = {
+    theater, show, key, sold,
+    dateEn: day.dateEn,
+    dateJa: day.dateJa,
+    step: 1, counts: { adult: 2 }, seats: [], seatEls: {}, holdEnd: null,
+    paying: false, pay: PAYMENT_METHODS[0].id, code: "", msg: ""
+  };
+  bookingOpen = true;
+  bkRoot.classList.add("open");
+  bkRoot.setAttribute("aria-hidden", "false");
+  clearInterval(bkTick);
+  bkTick = setInterval(bkUpdateHold, 500);
+  bkRender();
+  document.getElementById("bkBack").focus({ preventScroll: true });
+}
+function closeBooking() {
+  bookingOpen = false;
+  bk = null;
+  clearInterval(bkTick);
+  bkRoot.classList.remove("open");
+  bkRoot.setAttribute("aria-hidden", "true");
+}
+function bkGo(step, msg) {
+  bk.step = step;
+  bk.msg = msg || "";
+  if (step === 1) { bk.holdEnd = null; bk.seats = []; }
+  if (step === 2 && !bk.holdEnd) bk.holdEnd = Date.now() + HOLD_MINUTES * 60000;
+  bkRender();
+}
+function bkBack() {
+  if (!bk || bk.paying) return;
+  if (bk.step === 1 || bk.step === 4) closeBooking();
+  else bkGo(bk.step - 1);
+}
+function bkNext() {
+  if (!bk || bk.paying) return;
+  if (bk.step === 1) { if (bkTicketCount() > 0) { if (bk.seats.length !== bkTicketCount()) bk.seats = []; bkGo(2); } }
+  else if (bk.step === 2) { if (bk.seats.length === bkTicketCount()) bkGo(3); }
+  else if (bk.step === 3) bkPay();
+  else closeBooking();
+}
+document.getElementById("bkBack").addEventListener("click", bkBack);
+document.getElementById("bkClose").addEventListener("click", closeBooking);
+document.getElementById("bkNext").addEventListener("click", bkNext);
+
+function bkRender() {
+  document.getElementById("bkTheater").textContent = bk.theater.name;
+  document.getElementById("bkWhen").textContent = bk.dateEn + " \u00B7 " + bk.show.time + " \u00B7 " + bk.show.screen;
+  const names = [["Tickets", "券種"], ["Seats", "座席"], ["Review", "確認"], ["Done", "完了"]];
+  const steps = document.getElementById("bkSteps");
+  steps.textContent = "";
+  names.forEach((n, i) => {
+    const li = bkEl("li", i + 1 === bk.step ? "on" : (i + 1 < bk.step ? "done" : ""));
+    li.append(bkEl("span", null, n[0]), bkEl("small", null, n[1]));
+    steps.appendChild(li);
+  });
+  const body = document.getElementById("bkBody");
+  body.textContent = "";
+  [bkStepTickets, bkStepSeats, bkStepReview, bkStepDone][bk.step - 1](body);
+  document.getElementById("bkBack").hidden = bk.step === 4;
+  bkFooter();
+  bkRoot.scrollTop = 0;
+  bkUpdateHold();
+}
+
+function bkFooter() {
+  const n = bkTicketCount(), total = bkTotal();
+  const btn = document.getElementById("bkNext");
+  const sumBox = document.querySelector("#bkFoot .bk-sum");
+  sumBox.hidden = bk.step === 4;
+  document.getElementById("bkSumTotal").textContent = bkYen(total);
+  let info = n + (n === 1 ? " ticket" : " tickets");
+  if (bk.step === 2) info += " \u00B7 " + bk.seats.length + "/" + n + " seats";
+  document.getElementById("bkSumInfo").textContent = info;
+  if (bk.step === 1) { btn.textContent = "Choose seats \u2192"; btn.disabled = n === 0; }
+  else if (bk.step === 2) { btn.textContent = "Review \u2192"; btn.disabled = bk.seats.length !== n; }
+  else if (bk.step === 3) { btn.textContent = bk.paying ? "Processing\u2026" : "Pay " + bkYen(total) + " (demo)"; btn.disabled = bk.paying; }
+  else { btn.textContent = "Done"; btn.disabled = false; }
+}
+
+function bkUpdateHold() {
+  if (!bk || !bk.holdEnd || bk.paying || bk.step < 2 || bk.step > 3) return;
+  const left = bk.holdEnd - Date.now();
+  if (left <= 0) {
+    bk.seats = [];
+    bk.holdEnd = null;
+    bkGo(2, "Your seat hold expired, so please choose your seats again. / 座席の確保時間が過ぎました。もう一度お選びください。");
+    return;
+  }
+  const el = document.querySelector("#bkBody .bk-hold");
+  if (!el) return;
+  const m = Math.floor(left / 60000), sec = Math.floor(left / 1000) % 60;
+  const clock = String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
+  el.textContent = "Seats held for " + clock + "  /  座席確保 残り " + clock;
+  el.classList.toggle("low", left < 60000);
+}
+
+/* --- step 1: tickets --- */
+function bkStepTickets(body) {
+  body.append(bkEl("h3", "bk-h", "How many tickets?"), bkEl("div", "bk-hja", "枚数を選択してください (最大" + MAX_TICKETS + "枚)"));
+  const refreshers = [];
+  const refreshAll = () => { refreshers.forEach(f => f()); bkFooter(); };
+  TICKET_TYPES.forEach(t => {
+    const row = bkEl("div", "bk-type");
+    const left = bkEl("div");
+    left.append(bkEl("div", "nm", t.en), bkEl("div", "nmja", t.ja), bkEl("div", "pr", bkYen(t.price)));
+    const stepper = bkEl("div", "bk-stepper");
+    const minus = bkEl("button", "bk-step-btn", "\u2212"); minus.type = "button"; minus.setAttribute("aria-label", "Fewer " + t.en + " tickets");
+    const count = bkEl("span", "bk-count", "0"); count.setAttribute("aria-live", "polite");
+    const plus = bkEl("button", "bk-step-btn", "+"); plus.type = "button"; plus.setAttribute("aria-label", "More " + t.en + " tickets");
+    minus.addEventListener("click", () => { bk.counts[t.id] = Math.max(0, (bk.counts[t.id] || 0) - 1); refreshAll(); });
+    plus.addEventListener("click", () => { if (bkTicketCount() < MAX_TICKETS) { bk.counts[t.id] = (bk.counts[t.id] || 0) + 1; refreshAll(); } });
+    refreshers.push(() => {
+      const c = bk.counts[t.id] || 0;
+      count.textContent = c;
+      minus.disabled = c === 0;
+      plus.disabled = bkTicketCount() >= MAX_TICKETS;
+    });
+    stepper.append(minus, count, plus);
+    row.append(left, stepper);
+    body.appendChild(row);
+  });
+  refreshers.forEach(f => f());
+  body.appendChild(bkEl("div", "bk-demo", "Prices are samples. / 料金はサンプルです。"));
+}
+
+/* --- step 2: seats --- */
+function bkStepSeats(body) {
+  const n = bkTicketCount();
+  if (bk.msg) body.appendChild(bkEl("div", "bk-msg", bk.msg));
+  body.appendChild(bkEl("div", "bk-hold"));
+  body.append(bkEl("h3", "bk-h", "Choose " + n + (n === 1 ? " seat" : " seats")), bkEl("div", "bk-hja", n + "席を選んでください"));
+
+  const best = bkEl("button", "bk-ghost", "Best available / おまかせ"); best.type = "button";
+  best.addEventListener("click", () => { bk.seats = bkBestSeats(n); bkPaintSeats(); bkFooter(); });
+  body.appendChild(best);
+
+  const scroll = bkEl("div", "seatscroll");
+  const map = bkEl("div", "seatmap");
+  map.append(bkEl("div", "screenbar"), bkEl("div", "screenlbl", "SCREEN \u00B7 スクリーン"));
+  const cols = ["16px"];
+  SEAT_BLOCKS.forEach((b, i) => { if (i) cols.push("12px"); for (let k = 0; k < b; k++) cols.push("minmax(0, 1fr)"); });
+  cols.push("16px");
+  bk.seatEls = {};
+  SEAT_ROWS.split("").forEach(r => {
+    const row = bkEl("div", "srow");
+    row.style.gridTemplateColumns = cols.join(" ");
+    row.appendChild(bkEl("span", "rl", r));
+    let num = 0;
+    SEAT_BLOCKS.forEach((b, bi) => {
+      if (bi) row.appendChild(bkEl("span", "aisle"));
+      for (let k = 0; k < b; k++) {
+        num++;
+        const id = r + num;
+        const btn = bkEl("button", "seat");
+        btn.type = "button";
+        if (bk.sold.has(id)) {
+          btn.disabled = true;
+          btn.setAttribute("aria-label", "Row " + r + ", seat " + num + ", taken");
+        } else {
+          btn.setAttribute("aria-label", "Row " + r + ", seat " + num + ", available");
+          btn.setAttribute("aria-pressed", "false");
+          btn.addEventListener("click", () => bkToggleSeat(id));
+        }
+        bk.seatEls[id] = btn;
+        row.appendChild(btn);
+      }
+    });
+    row.appendChild(bkEl("span", "rl", r));
+    map.appendChild(row);
+  });
+  scroll.appendChild(map);
+  body.appendChild(scroll);
+
+  const legend = bkEl("div", "legend2");
+  [["", "Available"], ["sel", "Selected"], ["sold", "Taken"]].forEach(([c, t]) => {
+    const s = bkEl("span"); s.append(bkEl("i", c), document.createTextNode(t)); legend.appendChild(s);
+  });
+  body.appendChild(legend);
+  const picked = bkEl("div", "bk-picked"); picked.id = "bkPicked"; picked.setAttribute("aria-live", "polite");
+  body.appendChild(picked);
+  bkPaintSeats();
+}
+function bkToggleSeat(id) {
+  const n = bkTicketCount();
+  const i = bk.seats.indexOf(id);
+  if (i >= 0) bk.seats.splice(i, 1);
+  else { if (bk.seats.length >= n) bk.seats.shift(); bk.seats.push(id); }   // choosing one too many drops the oldest pick
+  bkPaintSeats();
+  bkFooter();
+}
+function bkPaintSeats() {
+  Object.keys(bk.seatEls).forEach(id => {
+    const el = bk.seatEls[id];
+    if (!el.disabled) el.setAttribute("aria-pressed", bk.seats.includes(id) ? "true" : "false");
+  });
+  const picked = document.getElementById("bkPicked");
+  if (picked) picked.textContent = bk.seats.length ? "Your seats: " + bk.seats.slice().sort(bkSeatSort).join(", ") : "No seats selected yet";
+}
+// Group together near the middle, a little back from the screen, all in the same section
+function bkBestSeats(n) {
+  const rows = SEAT_ROWS.split(""), total = bkSeatTotal(), centre = (total + 1) / 2;
+  const order = rows.map((r, i) => i).sort((a, b) => Math.abs(a - rows.length * 0.6) - Math.abs(b - rows.length * 0.6));
+  for (const ri of order) {
+    const starts = [];
+    for (let s = 1; s + n - 1 <= total; s++) starts.push(s);
+    starts.sort((a, b) => Math.abs(a + (n - 1) / 2 - centre) - Math.abs(b + (n - 1) / 2 - centre));
+    for (const s of starts) {
+      const ids = [];
+      for (let k = 0; k < n; k++) ids.push(rows[ri] + (s + k));
+      if (ids.every((id, k) => !bk.sold.has(id) && bkBlockOf(s + k) === bkBlockOf(s))) return ids;
+    }
+  }
+  const free = [];                                       // no group fits: any free seats
+  rows.forEach(r => { for (let k = 1; k <= total; k++) if (!bk.sold.has(r + k)) free.push(r + k); });
+  return free.slice(0, n);
+}
+
+/* --- step 3: review + pay (pretend) --- */
+function bkKv(label, value, cls) {
+  const r = bkEl("div", "bk-kv" + (cls ? " " + cls : ""));
+  r.append(bkEl("span", null, label), bkEl("span", null, value));
+  return r;
+}
+function bkStepReview(body) {
+  body.appendChild(bkEl("div", "bk-hold"));
+  body.append(bkEl("h3", "bk-h", "Review your order"), bkEl("div", "bk-hja", "ご注文内容の確認"));
+
+  const show = bkEl("div", "bk-card");
+  show.appendChild(bkEl("h4", null, "Showing"));
+  show.append(
+    bkKv("Film", MOVIE_EN),
+    bkKv("Theater", bk.theater.name),
+    bkKv("When", bk.dateEn + ", " + bk.show.time),
+    bkKv("Screen", bk.show.screen),
+    bkKv("Seats", bk.seats.slice().sort(bkSeatSort).join(", "))
+  );
+  const tix = bkEl("div", "bk-card");
+  tix.appendChild(bkEl("h4", null, "Tickets"));
+  TICKET_TYPES.forEach(t => {
+    const c = bk.counts[t.id] || 0;
+    if (c) tix.appendChild(bkKv(c + " \u00D7 " + t.en, bkYen(c * t.price)));
+  });
+  tix.appendChild(bkKv("Total", bkYen(bkTotal()), "total"));
+  body.append(show, tix);
+
+  const pay = bkEl("div", "bk-card");
+  pay.appendChild(bkEl("h4", null, "Payment method"));
+  const radios = [];
+  PAYMENT_METHODS.forEach(m => {
+    const b = bkEl("button", "bk-pay"); b.type = "button"; b.setAttribute("role", "radio");
+    const label = bkEl("span"); label.append(document.createTextNode(m.en), bkEl("small", null, m.ja));
+    b.append(bkEl("span", "dot"), label);
+    b.addEventListener("click", () => { bk.pay = m.id; radios.forEach(([id, el]) => el.setAttribute("aria-checked", id === bk.pay ? "true" : "false")); });
+    b.setAttribute("aria-checked", m.id === bk.pay ? "true" : "false");
+    radios.push([m.id, b]);
+    pay.appendChild(b);
+  });
+  body.appendChild(pay);
+  body.appendChild(bkEl("div", "bk-demo", "Demo only: nothing is charged and no payment details are collected. / デモです。実際の請求や決済情報の入力はありません。"));
+}
+function bkPay() {
+  if (bk.paying) return;
+  const mine = bk;
+  bk.paying = true;
+  bkFooter();
+  setTimeout(() => {
+    if (bk !== mine) return;                             // closed while "processing": nothing was booked
+    const digits = String(Math.floor(bkRand(mine.key + Date.now())() * 1e6)).padStart(6, "0");
+    mine.code = "GZ-" + digits;
+    (bkSold[mine.key] = bkSold[mine.key] || []).push(...mine.seats);
+    mine.holdEnd = null;
+    mine.paying = false;
+    bkGo(4);
+  }, 1400);
+}
+
+/* --- step 4: your (pretend) ticket --- */
+function bkQR(code) {
+  const rnd = bkRand(code), N = 21, ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 " + N + " " + N);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Sample QR code (not scannable)");
+  const rect = (x, y, w, h, fill) => {
+    const r = document.createElementNS(ns, "rect");
+    r.setAttribute("x", x); r.setAttribute("y", y); r.setAttribute("width", w); r.setAttribute("height", h); r.setAttribute("fill", fill);
+    svg.appendChild(r);
+  };
+  rect(0, 0, N, N, "#fff");
+  const finder = (ox, oy) => { rect(ox, oy, 7, 7, "#000"); rect(ox + 1, oy + 1, 5, 5, "#fff"); rect(ox + 2, oy + 2, 3, 3, "#000"); };
+  finder(0, 0); finder(N - 7, 0); finder(0, N - 7);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    if ((x < 8 && y < 8) || (x >= N - 8 && y < 8) || (x < 8 && y >= N - 8)) continue;
+    if (rnd() < 0.5) rect(x, y, 1, 1, "#000");
+  }
+  return svg;
+}
+function bkStepDone(body) {
+  body.append(bkEl("div", "bk-ok", "\u2713 Booked (demo)"), bkEl("div", "bk-okja", "購入完了(デモ)"));
+  const t = bkEl("div", "bk-ticket");
+  const info = bkEl("div");
+  info.append(bkEl("div", "mv", MOVIE_EN), bkEl("div", "mvja", MOVIE_JA));
+  info.append(
+    bkKv("Theater", bk.theater.name),
+    bkKv("Date", bk.dateEn),
+    bkKv("Time", bk.show.time),
+    bkKv("Screen", bk.show.screen),
+    bkKv("Seats", bk.seats.slice().sort(bkSeatSort).join(", ")),
+    bkKv("Tickets", bkTicketCount() + " \u00B7 " + bkYen(bkTotal()))
+  );
+  const codeRow = bkEl("div", "code");
+  codeRow.append(bkEl("span", null, "Booking code"), bkEl("b", null, bk.code));
+  t.append(info, bkQR(bk.code), codeRow);
+  body.append(t, bkEl("p", "note", "This is a demo ticket. No payment was made and nothing was actually booked. / これはデモ用のチケットです。実際の購入・予約は行われていません。"));
+}
+
+/* ---------- Music ---------- */
+
+const audio = new Audio();
+audio.preload = "metadata";
+audio.volume = AUDIO_VOLUME;
+audio.src = encodeURI(AUDIO_SRC);
+const clipEnd = AUDIO_LENGTH > 0 ? AUDIO_START + AUDIO_LENGTH : Infinity;
+let audioFailed = false;
+
+audio.addEventListener("error", () => {
+  audioFailed = true;
+  showHint("Couldn't load \"" + AUDIO_SRC + "\". Check the file is in the same folder as this page and the name matches.", 6000);
+});
+audio.addEventListener("loadedmetadata", () => rewind());      // jump to the clip's start once the file is ready
+
+function rewind() { try { audio.currentTime = AUDIO_START; } catch (e) {} audio.volume = AUDIO_VOLUME; }
+
+// The clip ends at start + length even though the song is longer: fade out, then stop (or loop)
+setInterval(() => {
+  if (audio.paused) return;
+  const t = audio.currentTime;
+  if (t >= clipEnd) {
+    if (AUDIO_LOOP) rewind();
+    else { audio.pause(); rewind(); showHint("\u21BA Done. Tap to play again", 1500); }
+    return;
+  }
+  if (AUDIO_FADE > 0 && clipEnd - t < AUDIO_FADE) audio.volume = AUDIO_VOLUME * Math.max(0, (clipEnd - t) / AUDIO_FADE);
+  else if (audio.volume !== AUDIO_VOLUME) audio.volume = AUDIO_VOLUME;
+}, 60);
+
+audio.addEventListener("ended", () => {                        // only reached if the song is shorter than the clip
+  rewind();
+  if (AUDIO_LOOP) audio.play().catch(() => {});
+});
+
+function playMusic() {
+  if (audio.currentTime < AUDIO_START || audio.currentTime >= clipEnd) rewind();   // always begin inside the clip
+  audio.volume = AUDIO_VOLUME;
+  const p = audio.play();
+  if (p && p.catch) p.catch(() => { if (!audioFailed) showHint("Couldn't play the music on this device.", 3500); });
+}
+function resetAudio() {
+  audio.pause();
+  rewind();
+  if (DOUBLE_TAP_RESTARTS) { playMusic(); showHint("\u21BA Restarted", 1000); }
+  else showHint("\u21BA Reset", 1000);
+}
+
+/* ---------- Scream (long press) ---------- */
+
+const scream = new Audio();
+scream.preload = "auto";
+scream.volume = SCREAM_VOLUME;
+scream.src = encodeURI(SCREAM_SRC);
+scream.addEventListener("error", () => {
+  showHint("Couldn't load \"" + SCREAM_SRC + "\". Check the file is in the same folder as this page and the name matches.", 6000);
+});
+
+// Returns true if it started. Some phones only allow audio to start on release, so a refused start is retried then.
+function playScream() {
+  try { scream.currentTime = 0; } catch (e) {}
+  scream.volume = SCREAM_VOLUME;
+  const p = scream.play();
+  if (p && p.then) return p.then(() => true, () => false);
+  return Promise.resolve(true);
+}
+
+/* ---------- Taps ---------- */
+// A tap = press and release without moving much (detected on release: phones only start audio from a release).
+// Tap = stomp + play. Tap again = pause. Double-tap = reset the music. A tap while the showtimes are open just closes them.
+// Press and hold (LONG_PRESS_TIME) = Godzilla's scream.
+
+let down = null;
+let lastTap = -99;
+let holdTimer = null;
+
+function cancelHold() { clearTimeout(holdTimer); holdTimer = null; }
+
+stage.addEventListener("pointerdown", e => {
+  if (e.target.closest && e.target.closest(".ui button")) { down = null; return; }
+  down = { x: e.clientX, y: e.clientY, id: e.pointerId, long: false, pending: false };
+  cancelHold();
+  if (sheetOpen) return;
+  const mine = down;
+  holdTimer = setTimeout(async () => {
+    holdTimer = null;
+    if (down !== mine) return;
+    mine.long = true;
+    if (navigator.vibrate) navigator.vibrate(20);
+    const ok = await playScream();
+    if (!ok) mine.pending = true;                       // refused mid-press: try again on release
+  }, LONG_PRESS_TIME * 1000);
+});
+stage.addEventListener("pointermove", e => {
+  if (down && !down.long && down.id === e.pointerId && Math.hypot(e.clientX - down.x, e.clientY - down.y) > TAP_MAX_MOVE) cancelHold();
+});
+stage.addEventListener("pointercancel", () => { cancelHold(); down = null; });
+stage.addEventListener("contextmenu", e => e.preventDefault());
+stage.addEventListener("pointerup", e => {
+  if (!down || down.id !== e.pointerId) return;
+  cancelHold();
+  const held = down;
+  const moved = Math.hypot(e.clientX - held.x, e.clientY - held.y);
+  down = null;
+  if (held.long) {                                      // it was a long press: never also a tap
+    if (held.pending) playScream();
+    return;
+  }
+  if (moved > TAP_MAX_MOVE) return;
+
+  if (sheetOpen) { closeSheet(); return; }
+
+  const now = performance.now() / 1000;
+  if (now - lastTap < DOUBLE_TAP_TIME) {
+    lastTap = -99;
+    resetAudio();
+    if (DOUBLE_TAP_RECENTERS) base = null;
+    return;
+  }
+  lastTap = now;
+
+  if (audio.paused) {                                  // first tap: play (and stomp)
+    playMusic();
+    if (!reduceMotion) startStomp(now);
+  } else {                                             // tap while it plays: pause
+    audio.pause();
+    showHint("\u23F8 Paused", 900);
+    if (STOMP_ON_PAUSE_TAP && !reduceMotion) startStomp(now);
+  }
+});
+
+/* ---------- Motion permission / start-up ---------- */
+
+function startSensors() {
+  window.addEventListener("deviceorientation", onOrientation);
+  window.addEventListener("devicemotion", onMotion);
+  enableBtn.classList.add("hidden");
+  showHint("Tap: stomp + music, tap again to pause. Hold: scream. Shake: showtimes. Tilt to look around.", 6000);
+  setTimeout(() => {
+    if (!gotSensor && !gotMotion) showHint("No motion sensor found. Wiggle your mouse over the image for showtimes.", 4000);
+  }, 1500);
+}
+
+const needsPermission =
+  (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") ||
+  (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function");
+const isTouch = matchMedia("(pointer: coarse)").matches;
+
+if (needsPermission) {
+  enableBtn.classList.remove("hidden");
+  enableBtn.addEventListener("click", async () => {
+    try {
+      const req = typeof DeviceMotionEvent.requestPermission === "function"
+        ? DeviceMotionEvent.requestPermission()
+        : DeviceOrientationEvent.requestPermission();
+      const result = await req;
+      if (result === "granted") startSensors();
+      else { enableBtn.classList.add("hidden"); showHint("Motion access was denied. Reload the page to try again.", 5000); }
+    } catch (err) {
+      showHint("Couldn't enable motion on this page.", 4000);
+    }
+  });
+} else if (isTouch && ("DeviceMotionEvent" in window || "DeviceOrientationEvent" in window)) {
+  startSensors();
+} else {
+  showHint("Click: stomp + music, click again to pause. Hold: scream. Wiggle the mouse (or press S) for showtimes.", 5500);
+}
+
+// Wait until every layer is decoded so nothing pops in half-drawn, then start
+let started = false;
+function start() {
+  if (started) return;
+  started = true;
+  setAspect();
+  stage.style.visibility = "visible";
+  loadingEl.classList.add("done");
+  if (!reduceMotion) requestAnimationFrame(frame);
+}
+Promise.allSettled(layers.map(l => (l.el.decode ? l.el.decode() : Promise.resolve()))).then(start);
+setTimeout(start, 20000);       // safety net: never stay on the loading screen
+</script>
+</body>
+</html>
