@@ -635,7 +635,10 @@ function glowEnv(u) {
 
 /* ---------- Main loop ---------- */
 
+let frameRunning = false;   // false while the animation is paused behind the ticket screens
+
 function frame(now) {
+  frameRunning = true;
   const t = now / 1000;
   const dt = lastT == null ? 0 : Math.min(t - lastT, 0.05);
   lastT = t;
@@ -749,6 +752,15 @@ function frame(now) {
       }
     }
   }
+  // The ticket screens cover the whole poster, so stop animating it while they are open.
+  // (Keeps the phone's graphics chip free so the ticket text draws cleanly instead of flickering.)
+  if (bookingOpen) { frameRunning = false; return; }
+  requestAnimationFrame(frame);
+}
+function resumeFrames() {
+  if (!started || reduceMotion || frameRunning) return;
+  lastT = null;                        // so the animation doesn't jump by the time it was paused
+  frameRunning = true;
   requestAnimationFrame(frame);
 }
 
@@ -1054,6 +1066,7 @@ function openBooking(theater, show, day) {
 }
 function closeBooking() {
   bookingOpen = false;
+  resumeFrames();
   bk = null;
   clearInterval(bkTick);
   bkRoot.classList.remove("open");
@@ -1130,7 +1143,8 @@ function bkUpdateHold() {
   if (!el) return;
   const m = Math.floor(left / 60000), sec = Math.floor(left / 1000) % 60;
   const clock = String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
-  el.textContent = "Seats held for " + clock + "  /  座席確保 残り " + clock;
+  const txt = "Seats held for " + clock + "  /  座席確保 残り " + clock;
+  if (el.textContent !== txt) el.textContent = txt;
   el.classList.toggle("low", left < 60000);
 }
 
